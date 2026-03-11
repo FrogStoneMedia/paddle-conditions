@@ -2,14 +2,9 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from homeassistant.util import slugify
 
 from .const import CONF_NAME, SUBENTRY_TYPE_LOCATION
-
-_DASHBOARD_DIR: Path = Path(__file__).parent / "dashboard"
-_GENERATED_FILE: str = "paddle-generated.yaml"
 
 
 def _entity_id(location_slug: str, sensor_key: str) -> str:
@@ -17,8 +12,8 @@ def _entity_id(location_slug: str, sensor_key: str) -> str:
     return f"sensor.{location_slug}_{sensor_key}"
 
 
-def _location_view(name: str, slug: str, *, is_first: bool) -> str:
-    """Generate a Conditions view for one location."""
+def _location_view(name: str, slug: str) -> str:
+    """Generate a detail view for one location."""
     score = _entity_id(slug, "paddle_score")
     wind = _entity_id(slug, "wind_speed")
     gusts = _entity_id(slug, "wind_gusts")
@@ -29,7 +24,6 @@ def _location_view(name: str, slug: str, *, is_first: bool) -> str:
     vis = _entity_id(slug, "visibility")
     precip = _entity_id(slug, "precipitation_chance")
     condition = _entity_id(slug, "conditions")
-    forecast = _entity_id(slug, "3_hour_forecast")
     streamflow = _entity_id(slug, "streamflow")
 
     path = slugify(name)
@@ -38,38 +32,56 @@ def _location_view(name: str, slug: str, *, is_first: bool) -> str:
     path: {path}
     icon: mdi:kayaking
     cards:
-      - type: custom:paddle-score-card
+      - type: gauge
         entity: {score}
-        show_profile: true
-        show_limiting_factor: true
-
+        name: Paddle Score
+        min: 0
+        max: 100
+        severity:
+          green: 70
+          yellow: 40
+          red: 0
+      - type: entity
+        entity: {condition}
+        name: Conditions
       - type: entities
-        title: Current Conditions
+        title: Wind
         entities:
-          - {wind}
-          - {gusts}
-          - {air_temp}
-          - {water_temp}
-          - {uv}
-          - {aqi}
-          - {vis}
-          - {precip}
-          - {streamflow}
-          - {condition}
-
-      - type: custom:paddle-factors-card
-        entity: {score}
-
-      - type: custom:paddle-forecast-card
-        entity: {forecast}
-        max_blocks: 8
-
-      - type: custom:paddle-chart-card
-        entity: {forecast}
-        name: Forecast Chart
-        default_metrics:
-          - score
-          - wind
+          - entity: {wind}
+            name: Speed
+          - entity: {gusts}
+            name: Gusts
+      - type: entities
+        title: Environment
+        entities:
+          - entity: {air_temp}
+            name: Air Temp
+          - entity: {water_temp}
+            name: Water Temp
+          - entity: {uv}
+            name: UV Index
+          - entity: {aqi}
+            name: Air Quality
+          - entity: {vis}
+            name: Visibility
+          - entity: {precip}
+            name: Precipitation
+          - entity: {streamflow}
+            name: Streamflow
+      - type: history-graph
+        title: Score History
+        hours_to_show: 48
+        entities:
+          - entity: {score}
+            name: Score
+      - type: history-graph
+        title: Wind History
+        hours_to_show: 48
+        entities:
+          - entity: {wind}
+            name: Speed
+          - entity: {gusts}
+            name: Gusts
 """
 
 
@@ -88,63 +100,36 @@ def generate_dashboard_yaml(
     if not locations:
         return ""
 
-    # Sort by display_order then name
-    score_entities = [_entity_id(slug, "paddle_score") for _, slug in locations]
-
-    # Build chips card listing all locations
-    chips_yaml = "      - type: custom:paddle-chips-card\n        entities:\n"
-    for entity in score_entities:
-        chips_yaml += f"          - {entity}\n"
-    chips_yaml += "        show_refresh: true\n"
-
-    # Build overview + per-location views
     views = "views:\n"
 
-    # Overview tab with all locations' scores
+    # Overview tab when multiple locations
     if len(locations) > 1:
         views += "  - title: Overview\n    path: overview\n    icon: mdi:map-marker-multiple\n    cards:\n"
-        views += chips_yaml
         for name, slug in locations:
             score = _entity_id(slug, "paddle_score")
-            views += f"""      - type: custom:paddle-score-card
-        entity: {score}
-        show_profile: true
-        show_limiting_factor: true
-        name: "{name}"
-
+            condition = _entity_id(slug, "conditions")
+            wind = _entity_id(slug, "wind_speed")
+            views += f"""      - type: vertical-stack
+        cards:
+          - type: gauge
+            entity: {score}
+            name: "{name}"
+            min: 0
+            max: 100
+            severity:
+              green: 70
+              yellow: 40
+              red: 0
+          - type: glance
+            entities:
+              - entity: {condition}
+                name: Conditions
+              - entity: {wind}
+                name: Wind
 """
 
     # Per-location detail views
-    for i, (name, slug) in enumerate(locations):
-        views += _location_view(name, slug, is_first=(i == 0))
-
-    # History view
-    views += "  - title: History\n    path: history\n    icon: mdi:chart-line\n    cards:\n"
     for name, slug in locations:
-        score = _entity_id(slug, "paddle_score")
-        views += f"""      - type: custom:paddle-history-card
-        entity: {score}
-        name: "{name} History"
-        default_range: 7d
-        show_stats: true
+        views += _location_view(name, slug)
 
-"""
-
-    header = (
-        "# Paddle Conditions Dashboard\n"
-        "# Auto-generated from your configured locations.\n"
-        "# Re-generated each time you add or remove a location.\n\n"
-    )
-
-    return header + views
-
-
-def write_dashboard(subentries: dict) -> Path | None:
-    """Generate and write the dashboard YAML file. Returns the path or None."""
-    yaml_content = generate_dashboard_yaml(subentries)
-    if not yaml_content:
-        return None
-
-    output = _DASHBOARD_DIR / _GENERATED_FILE
-    output.write_text(yaml_content)
-    return output
+    return views

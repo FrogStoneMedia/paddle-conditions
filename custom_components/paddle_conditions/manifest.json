@@ -3,7 +3,7 @@
   "name": "Paddle Conditions",
   "codeowners": ["@FrogStoneMedia", "@michaelkahn"],
   "config_flow": true,
-  "dependencies": ["frontend", "http"],
+  "dependencies": [],
   "documentation": "https://github.com/FrogStoneMedia/paddle-conditions",
   "integration_type": "service",
   "iot_class": "cloud_polling",

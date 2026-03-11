@@ -2,15 +2,8 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any
-
-from homeassistant.components.frontend import add_extra_js_url
-from homeassistant.components.http import StaticPathConfig
-from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, Platform
+from homeassistant.const import Platform
 from homeassistant.core import (
-    CoreState,
-    Event,
     HomeAssistant,
     ServiceCall,
     ServiceResponse,
@@ -24,34 +17,12 @@ from .dashboard_generator import generate_dashboard_yaml
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 
-_FRONTEND_DIR: str = str(Path(__file__).parent / "frontend" / "dist")
-_FRONTEND_URL_BASE: str = f"/{DOMAIN}/frontend"
-_JS_FILENAME: str = "paddle-cards.js"
-_VERSION: str = "1.0.0"
-
 SERVICE_GET_DASHBOARD = "get_dashboard_yaml"
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Set up the Paddle Conditions domain (frontend resources)."""
-    if hass.state == CoreState.running:
-        await _async_register_frontend(hass)
-    else:
-
-        async def _on_started(_event: Event[Any]) -> None:
-            await _async_register_frontend(hass)
-
-        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _on_started)
-
+    """Set up the Paddle Conditions domain."""
     return True
-
-
-async def _async_register_frontend(hass: HomeAssistant) -> None:
-    """Register static path and JS resource for Lovelace cards."""
-    await hass.http.async_register_static_paths(
-        [StaticPathConfig(_FRONTEND_URL_BASE, _FRONTEND_DIR, cache_headers=True)]
-    )
-    add_extra_js_url(hass, f"{_FRONTEND_URL_BASE}/{_JS_FILENAME}?v={_VERSION}")
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: PaddleConfigEntry) -> bool:
