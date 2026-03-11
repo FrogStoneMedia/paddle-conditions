@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Paddle Conditions",
-        "description": "Paddle Conditions scores your favorite paddle spots using wind, air quality, temperature, UV, visibility, and precipitation data — so you know at a glance whether it's a Go, Caution, or No-go day.\n\nAfter setup, you'll add one or more paddle locations. For each location you'll need:\n- **Coordinates** (latitude and longitude)\n- **Water body type** (lake, river, or bay/ocean)\n- **USGS station ID** (optional, for river flow data)\n- **NOAA station ID** (optional, for water temperature)\n\nAll weather and air quality data is fetched automatically from free public APIs."
+        "description": "Paddle Conditions scores your favorite paddle spots using wind, air quality, temperature, UV, visibility, and precipitation data. Each spot gets a Go, Caution, or No-go rating.\n\nAfter setup, you'll add one or more paddle locations. For each location you'll need:\n- **Coordinates** (latitude and longitude)\n- **Water body type** (lake, river, or bay/ocean)\n- **USGS station ID** (optional, for river flow data)\n- **NOAA station ID** (optional, for water temperature)\n\nAll weather and air quality data is fetched automatically from free public APIs."
       }
     },
     "abort": {
@@ -63,7 +63,7 @@
           "cloud_sync_token": "Cloud sync token (optional)"
         },
         "data_description": {
-          "activity": "Switch between paddle boarding and kayaking — each has its own scoring profiles",
+          "activity": "Switch between paddle boarding and kayaking. Each has its own scoring profiles",
           "profile": "Preset weight configurations tuned for different paddling styles",
           "update_interval": "How often to refresh weather and condition data from APIs"
         }
