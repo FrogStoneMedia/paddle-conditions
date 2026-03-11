@@ -179,31 +179,19 @@ Weights are customizable. Profiles provide good defaults: Racing tolerates more 
 
 ## Dashboard
 
-The integration generates a ready-to-use dashboard based on your configured locations. No manual find-and-replace needed.
+The integration generates a ready-to-use dashboard based on your configured locations. Each location gets a score gauge, conditions at a glance, and a 24-hour history graph. All cards are built-in Home Assistant types — no extra HACS card downloads needed.
 
-### Auto-generated dashboard
+### Getting the dashboard
 
-After you add your first location, a persistent notification appears in Home Assistant with import instructions. The dashboard YAML is generated at `custom_components/paddle_conditions/dashboard/paddle-generated.yaml` and includes all your configured locations. It regenerates automatically when you add or remove a location.
+1. Go to **Developer Tools > Actions** (may be labeled "Services" in older versions)
+2. Search for `paddle_conditions.get_dashboard_yaml`
+3. Click **Perform action** — the response contains your complete dashboard config
+4. Copy the entire response
+5. Go to **Settings > Dashboards > Add Dashboard > From scratch**
+6. Open the new dashboard, click the three-dot menu > **Edit Dashboard** > three-dot menu > **Raw configuration editor**
+7. Paste the copied config and save
 
-### Importing the dashboard
-
-1. Go to **Settings > Dashboards > Add Dashboard**
-2. Choose **From scratch** and create a new dashboard
-3. Open the dashboard, switch to YAML mode (three dots > Edit > Raw configuration editor)
-4. Paste the contents of `paddle-generated.yaml`
-
-With multiple locations, the dashboard includes an **Overview** tab showing all your spots side-by-side, plus a detail tab for each location with conditions, forecast, and charts, and a **History** tab at the end.
-
-### Bundled cards
-
-All cards register automatically when the integration loads. Each card has a visual editor in the dashboard UI, no YAML needed.
-
-- `paddle-score-card`: large hero card with score, rating, and key conditions
-- `paddle-factors-card`: horizontal progress bars for each scoring factor
-- `paddle-chips-card`: compact location chips for multi-spot navigation
-- `paddle-forecast-card`: tabular 3-hour forecast with highlighted best window
-- `paddle-chart-card`: Chart.js time-series graphs for score, wind, temp, UV
-- `paddle-history-card`: historical score graph with configurable range (7d, 30d, etc.)
+The dashboard is generated from your current locations. If you add or remove a location, run the action again to get an updated config.
 
 ---
 

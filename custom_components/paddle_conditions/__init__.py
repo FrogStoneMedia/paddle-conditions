@@ -13,7 +13,7 @@ from homeassistant.helpers.typing import ConfigType
 
 from .const import DOMAIN, SUBENTRY_TYPE_LOCATION
 from .coordinator import PaddleConfigEntry, PaddleCoordinator
-from .dashboard_generator import generate_dashboard_yaml
+from .dashboard_generator import generate_dashboard
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 
@@ -42,13 +42,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: PaddleConfigEntry) -> bo
     if not hass.services.has_service(DOMAIN, SERVICE_GET_DASHBOARD):
 
         def handle_get_dashboard(call: ServiceCall) -> ServiceResponse:
-            """Return generated dashboard YAML for all configured locations."""
+            """Return generated dashboard config for all configured locations."""
             entries = hass.config_entries.async_entries(DOMAIN)
             all_subentries: dict = {}
             for cfg_entry in entries:
                 all_subentries.update(cfg_entry.subentries)
-            yaml_content = generate_dashboard_yaml(all_subentries)
-            return {"yaml": yaml_content}
+            return generate_dashboard(all_subentries)
 
         hass.services.async_register(
             DOMAIN,
