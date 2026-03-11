@@ -100,10 +100,7 @@ class LocationSubentryFlow(ConfigSubentryFlow):  # type: ignore[misc]
                 self._preset_defaults = None
             return await self.async_step_location()
 
-        preset_options = [
-            {"value": key, "label": data[CONF_NAME]}
-            for key, data in PRESET_LOCATIONS.items()
-        ]
+        preset_options = [{"value": key, "label": data[CONF_NAME]} for key, data in PRESET_LOCATIONS.items()]
         preset_options.append({"value": PRESET_CUSTOM, "label": "Custom location"})
 
         return self.async_show_form(

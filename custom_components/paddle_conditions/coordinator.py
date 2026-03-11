@@ -49,9 +49,7 @@ class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):  # type: ignor
         subentry_id: str,
         subentry: ConfigSubentry,
     ) -> None:
-        interval = config_entry.options.get(
-            "update_interval", DEFAULT_UPDATE_INTERVAL_MINUTES
-        )
+        interval = config_entry.options.get("update_interval", DEFAULT_UPDATE_INTERVAL_MINUTES)
         super().__init__(
             hass,
             LOGGER,
@@ -92,19 +90,13 @@ class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):  # type: ignor
         noaa_water_temp = None
 
         optional_tasks: list[tuple[str, asyncio.Task[Any]]] = []
-        aqi_task = asyncio.create_task(
-            self.aqi_client.fetch(self.latitude, self.longitude)
-        )
+        aqi_task = asyncio.create_task(self.aqi_client.fetch(self.latitude, self.longitude))
         optional_tasks.append(("aqi", aqi_task))
         if self.usgs_station_id:
-            usgs_task = asyncio.create_task(
-                self.usgs_client.fetch(self.usgs_station_id)
-            )
+            usgs_task = asyncio.create_task(self.usgs_client.fetch(self.usgs_station_id))
             optional_tasks.append(("usgs", usgs_task))
         if self.noaa_station_id:
-            noaa_task = asyncio.create_task(
-                self.noaa_client.fetch_water_temp(self.noaa_station_id)
-            )
+            noaa_task = asyncio.create_task(self.noaa_client.fetch_water_temp(self.noaa_station_id))
             optional_tasks.append(("noaa", noaa_task))
 
         await asyncio.gather(*(t for _, t in optional_tasks), return_exceptions=True)
@@ -113,7 +105,9 @@ class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):  # type: ignor
             if task.exception() is not None:
                 LOGGER.warning(
                     "%s fetch failed for %s: %s",
-                    name.upper(), self.location_name, task.exception(),
+                    name.upper(),
+                    self.location_name,
+                    task.exception(),
                 )
             elif name == "aqi":
                 aqi = task.result()

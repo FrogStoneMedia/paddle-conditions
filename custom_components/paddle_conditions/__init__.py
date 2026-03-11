@@ -43,9 +43,7 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
     await hass.http.async_register_static_paths(
         [StaticPathConfig(_FRONTEND_URL_BASE, _FRONTEND_DIR, cache_headers=True)]
     )
-    add_extra_js_url(
-        hass, f"{_FRONTEND_URL_BASE}/{_JS_FILENAME}?v={_VERSION}"
-    )
+    add_extra_js_url(hass, f"{_FRONTEND_URL_BASE}/{_JS_FILENAME}?v={_VERSION}")
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: PaddleConfigEntry) -> bool:
