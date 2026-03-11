@@ -179,14 +179,20 @@ Weights are customizable. Profiles provide good defaults: Racing tolerates more 
 
 ## Dashboard
 
-The integration ships a reference dashboard at `custom_components/paddle_conditions/dashboard/paddle.yaml`.
+The integration generates a ready-to-use dashboard based on your configured locations. No manual find-and-replace needed.
+
+### Auto-generated dashboard
+
+After you add your first location, a persistent notification appears in Home Assistant with import instructions. The dashboard YAML is generated at `custom_components/paddle_conditions/dashboard/paddle-generated.yaml` and includes all your configured locations. It regenerates automatically when you add or remove a location.
 
 ### Importing the dashboard
 
 1. Go to **Settings > Dashboards > Add Dashboard**
 2. Choose **From scratch** and create a new dashboard
 3. Open the dashboard, switch to YAML mode (three dots > Edit > Raw configuration editor)
-4. Paste the contents of `paddle.yaml`, replacing location slugs with your configured location names
+4. Paste the contents of `paddle-generated.yaml`
+
+With multiple locations, the dashboard includes an **Overview** tab showing all your spots side-by-side, plus a detail tab for each location with conditions, forecast, and charts, and a **History** tab at the end.
 
 ### Bundled cards
 
