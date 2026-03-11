@@ -1,0 +1,26 @@
+name: Bug Report
+description: Report a bug with Paddle Conditions
+labels: ["bug"]
+body:
+  - type: textarea
+    attributes:
+      label: Describe the bug
+      description: A clear description of what the bug is.
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: HA Version
+      description: What version of Home Assistant are you running?
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Integration Version
+      description: What version of Paddle Conditions are you running?
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Relevant log output
+      render: shell

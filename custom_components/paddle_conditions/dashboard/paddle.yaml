@@ -1,0 +1,74 @@
+# Paddle Conditions Dashboard
+# Uses bundled custom cards — no external HACS dependencies required.
+# Replace "lake_austin" with your location slug throughout.
+
+views:
+  - title: Conditions
+    path: conditions
+    icon: mdi:kayaking
+    cards:
+      - type: custom:paddle-chips-card
+        entities:
+          # Add one entry per location score entity
+          - sensor.paddle_conditions_lake_austin_score
+        show_refresh: true
+
+      - type: custom:paddle-score-card
+        entity: sensor.paddle_conditions_lake_austin_score
+        show_profile: true
+        show_limiting_factor: true
+
+      - type: entities
+        title: Current Conditions
+        entities:
+          - sensor.paddle_conditions_lake_austin_wind_speed
+          - sensor.paddle_conditions_lake_austin_wind_gusts
+          - sensor.paddle_conditions_lake_austin_air_temp
+          - sensor.paddle_conditions_lake_austin_water_temp
+          - sensor.paddle_conditions_lake_austin_uv_index
+          - sensor.paddle_conditions_lake_austin_aqi
+          - sensor.paddle_conditions_lake_austin_visibility
+          - sensor.paddle_conditions_lake_austin_precipitation
+
+      - type: custom:paddle-factors-card
+        entity: sensor.paddle_conditions_lake_austin_score
+
+  - title: Forecast
+    path: forecast
+    icon: mdi:calendar-clock
+    cards:
+      - type: custom:paddle-forecast-card
+        entity: sensor.paddle_conditions_lake_austin_forecast_3hr
+        max_blocks: 8
+
+      - type: custom:paddle-chart-card
+        entity: sensor.paddle_conditions_lake_austin_forecast_3hr
+        name: Forecast Chart
+        default_metrics:
+          - score
+          - wind
+
+      - type: entities
+        title: Wind & Temperature
+        entities:
+          - sensor.paddle_conditions_lake_austin_wind_speed
+          - sensor.paddle_conditions_lake_austin_wind_gusts
+          - sensor.paddle_conditions_lake_austin_air_temp
+          - sensor.paddle_conditions_lake_austin_condition
+
+  - title: Fitness
+    path: fitness
+    icon: mdi:rowing
+    cards:
+      - type: custom:paddle-fitness-card
+        monthly_goal: 12
+
+  - title: History
+    path: history
+    icon: mdi:chart-line
+    cards:
+      - type: custom:paddle-history-card
+        entity: sensor.paddle_conditions_lake_austin_score
+        name: Score History
+        default_range: 7d
+        show_stats: true

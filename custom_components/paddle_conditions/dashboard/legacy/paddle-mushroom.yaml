@@ -1,0 +1,654 @@
+# =============================================================================
+# PaddleConditions Dashboard
+# =============================================================================
+#
+# A bundled Lovelace dashboard for the PaddleConditions integration.
+#
+# INSTALLATION:
+#   1. In Home Assistant, go to Settings > Dashboards > Add Dashboard
+#   2. Choose "From YAML" and point to this file, or copy/paste into a
+#      manual dashboard configuration.
+#
+# REQUIRED CUSTOM CARDS (install via HACS > Frontend):
+#   - mushroom-cards    (https://github.com/piitaya/lovelace-mushroom)
+#   - apexcharts-card   (https://github.com/RomRider/apexcharts-card)
+#
+#   If these are not installed, the dashboard will still work using the
+#   built-in HA card fallbacks included in each section.
+#
+# ENTITY NAMING:
+#   Entities follow the pattern:
+#     sensor.paddle_conditions_{location}_{sensor_key}
+#
+#   For example, with a location named "Lake Austin":
+#     sensor.paddle_conditions_lake_austin_score
+#     sensor.paddle_conditions_lake_austin_wind_speed
+#
+#   Replace "lake_austin" below with your actual location slug.
+#   If you have multiple spots, duplicate the relevant cards and update
+#   the entity IDs accordingly.
+#
+# CUSTOMIZATION:
+#   Search and replace the following placeholder to match your location:
+#     lake_austin  ->  your_location_slug
+#
+#   For multi-spot setups, the "Spot Comparison" section at the bottom of
+#   the Conditions tab shows all spots side by side. Duplicate the cards
+#   in that section for each additional location.
+#
+# =============================================================================
+
+views:
+  # ===========================================================================
+  # TAB 1: CONDITIONS
+  # ===========================================================================
+  - title: Conditions
+    path: conditions
+    icon: mdi:waves
+    badges: []
+    cards:
+
+      # -----------------------------------------------------------------------
+      # Spot / Location Selection Chips
+      # -----------------------------------------------------------------------
+      # Add one chip per configured spot. Tapping navigates or filters.
+      # Duplicate the chip entity for each location you have configured.
+      - type: custom:mushroom-chips-card
+        chips:
+          - type: entity
+            entity: sensor.paddle_conditions_lake_austin_score
+            icon: mdi:map-marker
+            name: Lake Austin
+            tap_action:
+              action: more-info
+          # Uncomment and adapt for additional spots:
+          # - type: entity
+          #   entity: sensor.paddle_conditions_town_lake_score
+          #   icon: mdi:map-marker
+          #   name: Town Lake
+          #   tap_action:
+          #     action: more-info
+          - type: template
+            icon: mdi:refresh
+            tap_action:
+              action: call-service
+              service: homeassistant.update_entity
+              target:
+                entity_id: sensor.paddle_conditions_lake_austin_score
+
+      # -----------------------------------------------------------------------
+      # Hero Card: Overall Paddle Score
+      # -----------------------------------------------------------------------
+      # Displays the composite score (0-100) with Go / Caution / No-go color.
+      - type: custom:mushroom-template-card
+        primary: Paddle Score
+        secondary: >-
+          {{ states('sensor.paddle_conditions_lake_austin_score') }}%
+          — {{ state_attr('sensor.paddle_conditions_lake_austin_score', 'rating') }}
+        icon: mdi:paddle
+        entity: sensor.paddle_conditions_lake_austin_score
+        icon_color: >-
+          {% set rating = state_attr('sensor.paddle_conditions_lake_austin_score', 'rating') %}
+          {% if rating == 'GO' %}green
+          {% elif rating == 'CAUTION' %}orange
+          {% else %}red{% endif %}
+        badge_icon: >-
+          {% set rating = state_attr('sensor.paddle_conditions_lake_austin_score', 'rating') %}
+          {% if rating == 'GO' %}mdi:check-circle
+          {% elif rating == 'CAUTION' %}mdi:alert
+          {% else %}mdi:close-circle{% endif %}
+        badge_color: >-
+          {% set rating = state_attr('sensor.paddle_conditions_lake_austin_score', 'rating') %}
+          {% if rating == 'GO' %}green
+          {% elif rating == 'CAUTION' %}orange
+          {% else %}red{% endif %}
+        tap_action:
+          action: more-info
+        card_mod:
+          style: |
+            ha-card {
+              --ha-card-background: var(--card-background-color);
+              border-left: 4px solid
+                {% set rating = state_attr('sensor.paddle_conditions_lake_austin_score', 'rating') %}
+                {% if rating == 'GO' %}var(--success-color, green)
+                {% elif rating == 'CAUTION' %}var(--warning-color, orange)
+                {% else %}var(--error-color, red){% endif %};
+            }
+
+      # -- Fallback: standard gauge card if mushroom is not installed --
+      # Uncomment below and comment out the mushroom-template-card above.
+      # - type: gauge
+      #   entity: sensor.paddle_conditions_lake_austin_score
+      #   name: Paddle Score
+      #   min: 0
+      #   max: 100
+      #   severity:
+      #     green: 70
+      #     yellow: 40
+      #     red: 0
+      #   needle: true
+
+      # -----------------------------------------------------------------------
+      # Score Attributes: Profile, Activity, Limiting Factor
+      # -----------------------------------------------------------------------
+      - type: entities
+        title: Score Details
+        entities:
+          - type: attribute
+            entity: sensor.paddle_conditions_lake_austin_score
+            attribute: profile
+            name: Profile
+            icon: mdi:account-cog
+          - type: attribute
+            entity: sensor.paddle_conditions_lake_austin_score
+            attribute: activity
+            name: Activity
+            icon: mdi:rowing
+          - type: attribute
+            entity: sensor.paddle_conditions_lake_austin_score
+            attribute: limiting_factor
+            name: Limiting Factor
+            icon: mdi:alert-outline
+          - type: attribute
+            entity: sensor.paddle_conditions_lake_austin_score
+            attribute: veto_reason
+            name: Veto Reason
+            icon: mdi:cancel
+          - entity: sensor.paddle_conditions_lake_austin_condition
+            name: Conditions
+            icon: mdi:weather-partly-cloudy
+
+      # -----------------------------------------------------------------------
+      # Factor Bars: Individual Condition Scores
+      # -----------------------------------------------------------------------
+      # Each bar shows the sub-score (0-100) for a single factor.
+      # The raw value is shown via the entity's state; the sub-score is in
+      # the parent score sensor's "factors" attribute.
+      - type: vertical-stack
+        title: Condition Factors
+        cards:
+          # Wind Speed
+          - type: custom:mushroom-template-card
+            primary: "Wind Speed"
+            secondary: >-
+              {{ states('sensor.paddle_conditions_lake_austin_wind_speed') }} mph
+              {% set factors = state_attr('sensor.paddle_conditions_lake_austin_score', 'factors') %}
+              {% if factors and 'wind_speed' in factors %}
+              — Score: {{ factors.wind_speed }}/100
+              {% endif %}
+            icon: mdi:weather-windy
+            icon_color: >-
+              {% set factors = state_attr('sensor.paddle_conditions_lake_austin_score', 'factors') %}
+              {% if factors and 'wind_speed' in factors %}
+                {% if factors.wind_speed >= 70 %}green
+                {% elif factors.wind_speed >= 40 %}orange
+                {% else %}red{% endif %}
+              {% else %}grey{% endif %}
+            entity: sensor.paddle_conditions_lake_austin_wind_speed
+
+          # Wind Gusts
+          - type: custom:mushroom-template-card
+            primary: "Wind Gusts"
+            secondary: >-
+              {{ states('sensor.paddle_conditions_lake_austin_wind_gusts') }} mph
+              {% set factors = state_attr('sensor.paddle_conditions_lake_austin_score', 'factors') %}
+              {% if factors and 'wind_gusts' in factors %}
+              — Score: {{ factors.wind_gusts }}/100
+              {% endif %}
+            icon: mdi:weather-windy-variant
+            icon_color: >-
+              {% set factors = state_attr('sensor.paddle_conditions_lake_austin_score', 'factors') %}
+              {% if factors and 'wind_gusts' in factors %}
+                {% if factors.wind_gusts >= 70 %}green
+                {% elif factors.wind_gusts >= 40 %}orange
+                {% else %}red{% endif %}
+              {% else %}grey{% endif %}
+            entity: sensor.paddle_conditions_lake_austin_wind_gusts
+
+          # Air Quality (AQI)
+          - type: custom:mushroom-template-card
+            primary: "Air Quality"
+            secondary: >-
+              AQI {{ states('sensor.paddle_conditions_lake_austin_aqi') }}
+              {% set factors = state_attr('sensor.paddle_conditions_lake_austin_score', 'factors') %}
+              {% if factors and 'air_quality' in factors %}
+              — Score: {{ factors.air_quality }}/100
+              {% endif %}
+            icon: mdi:air-filter
+            icon_color: >-
+              {% set factors = state_attr('sensor.paddle_conditions_lake_austin_score', 'factors') %}
+              {% if factors and 'air_quality' in factors %}
+                {% if factors.air_quality >= 70 %}green
+                {% elif factors.air_quality >= 40 %}orange
+                {% else %}red{% endif %}
+              {% else %}grey{% endif %}
+            entity: sensor.paddle_conditions_lake_austin_aqi
+
+          # Temperature
+          - type: custom:mushroom-template-card
+            primary: "Temperature"
+            secondary: >-
+              Air: {{ states('sensor.paddle_conditions_lake_austin_air_temp') }}°F
+              {% if states('sensor.paddle_conditions_lake_austin_water_temp') != 'unavailable' %}
+              / Water: {{ states('sensor.paddle_conditions_lake_austin_water_temp') }}°F
+              {% endif %}
+              {% set factors = state_attr('sensor.paddle_conditions_lake_austin_score', 'factors') %}
+              {% if factors and 'temperature' in factors %}
+              — Score: {{ factors.temperature }}/100
+              {% endif %}
+            icon: mdi:thermometer
+            icon_color: >-
+              {% set factors = state_attr('sensor.paddle_conditions_lake_austin_score', 'factors') %}
+              {% if factors and 'temperature' in factors %}
+                {% if factors.temperature >= 70 %}green
+                {% elif factors.temperature >= 40 %}orange
+                {% else %}red{% endif %}
+              {% else %}grey{% endif %}
+            entity: sensor.paddle_conditions_lake_austin_air_temp
+
+          # UV Index
+          - type: custom:mushroom-template-card
+            primary: "UV Index"
+            secondary: >-
+              {{ states('sensor.paddle_conditions_lake_austin_uv_index') }}
+              {% set factors = state_attr('sensor.paddle_conditions_lake_austin_score', 'factors') %}
+              {% if factors and 'uv_index' in factors %}
+              — Score: {{ factors.uv_index }}/100
+              {% endif %}
+            icon: mdi:weather-sunny-alert
+            icon_color: >-
+              {% set factors = state_attr('sensor.paddle_conditions_lake_austin_score', 'factors') %}
+              {% if factors and 'uv_index' in factors %}
+                {% if factors.uv_index >= 70 %}green
+                {% elif factors.uv_index >= 40 %}orange
+                {% else %}red{% endif %}
+              {% else %}grey{% endif %}
+            entity: sensor.paddle_conditions_lake_austin_uv_index
+
+          # Visibility
+          - type: custom:mushroom-template-card
+            primary: "Visibility"
+            secondary: >-
+              {{ states('sensor.paddle_conditions_lake_austin_visibility') }} mi
+              {% set factors = state_attr('sensor.paddle_conditions_lake_austin_score', 'factors') %}
+              {% if factors and 'visibility' in factors %}
+              — Score: {{ factors.visibility }}/100
+              {% endif %}
+            icon: mdi:eye
+            icon_color: >-
+              {% set factors = state_attr('sensor.paddle_conditions_lake_austin_score', 'factors') %}
+              {% if factors and 'visibility' in factors %}
+                {% if factors.visibility >= 70 %}green
+                {% elif factors.visibility >= 40 %}orange
+                {% else %}red{% endif %}
+              {% else %}grey{% endif %}
+            entity: sensor.paddle_conditions_lake_austin_visibility
+
+          # Precipitation
+          - type: custom:mushroom-template-card
+            primary: "Precipitation"
+            secondary: >-
+              {{ states('sensor.paddle_conditions_lake_austin_precipitation') }}%
+              {% set factors = state_attr('sensor.paddle_conditions_lake_austin_score', 'factors') %}
+              {% if factors and 'precipitation' in factors %}
+              — Score: {{ factors.precipitation }}/100
+              {% endif %}
+            icon: mdi:weather-rainy
+            icon_color: >-
+              {% set factors = state_attr('sensor.paddle_conditions_lake_austin_score', 'factors') %}
+              {% if factors and 'precipitation' in factors %}
+                {% if factors.precipitation >= 70 %}green
+                {% elif factors.precipitation >= 40 %}orange
+                {% else %}red{% endif %}
+              {% else %}grey{% endif %}
+            entity: sensor.paddle_conditions_lake_austin_precipitation
+
+      # -- Fallback: standard entities card if mushroom is not installed --
+      # Uncomment below and comment out the vertical-stack above.
+      # - type: entities
+      #   title: Condition Factors
+      #   entities:
+      #     - entity: sensor.paddle_conditions_lake_austin_wind_speed
+      #       name: Wind Speed
+      #     - entity: sensor.paddle_conditions_lake_austin_wind_gusts
+      #       name: Wind Gusts
+      #     - entity: sensor.paddle_conditions_lake_austin_aqi
+      #       name: Air Quality (AQI)
+      #     - entity: sensor.paddle_conditions_lake_austin_air_temp
+      #       name: Air Temperature
+      #     - entity: sensor.paddle_conditions_lake_austin_water_temp
+      #       name: Water Temperature
+      #     - entity: sensor.paddle_conditions_lake_austin_uv_index
+      #       name: UV Index
+      #     - entity: sensor.paddle_conditions_lake_austin_visibility
+      #       name: Visibility
+      #     - entity: sensor.paddle_conditions_lake_austin_precipitation
+      #       name: Precipitation Probability
+
+      # -----------------------------------------------------------------------
+      # Spot Comparison: Side-by-side scores for all locations
+      # -----------------------------------------------------------------------
+      # Duplicate the gauge entries for each configured spot.
+      - type: horizontal-stack
+        title: Spot Comparison
+        cards:
+          - type: gauge
+            entity: sensor.paddle_conditions_lake_austin_score
+            name: Lake Austin
+            min: 0
+            max: 100
+            severity:
+              green: 70
+              yellow: 40
+              red: 0
+            needle: true
+          # Uncomment and adapt for additional spots:
+          # - type: gauge
+          #   entity: sensor.paddle_conditions_town_lake_score
+          #   name: Town Lake
+          #   min: 0
+          #   max: 100
+          #   severity:
+          #     green: 70
+          #     yellow: 40
+          #     red: 0
+          #   needle: true
+          # - type: gauge
+          #   entity: sensor.paddle_conditions_ladybird_lake_score
+          #   name: Lady Bird Lake
+          #   min: 0
+          #   max: 100
+          #   severity:
+          #     green: 70
+          #     yellow: 40
+          #     red: 0
+          #   needle: true
+
+  # ===========================================================================
+  # TAB 2: FORECAST
+  # ===========================================================================
+  - title: Forecast
+    path: forecast
+    icon: mdi:chart-timeline-variant
+    badges: []
+    cards:
+
+      # -----------------------------------------------------------------------
+      # 3-Hour Block Cards
+      # -----------------------------------------------------------------------
+      # The forecast_3hr sensor stores upcoming blocks in its "blocks" attribute.
+      # Each block has: start, end, score, rating, wind_mph, temp_f, uv.
+      - type: markdown
+        title: Upcoming 3-Hour Windows
+        content: >-
+          {% set blocks = state_attr('sensor.paddle_conditions_lake_austin_forecast_3hr', 'blocks') %}
+          {% if blocks %}
+          | Time | Score | Rating | Wind | Temp | UV |
+          |------|-------|--------|------|------|----|
+          {% for b in blocks[:8] %}
+          | {{ b.start[:5] }}–{{ b.end[:5] }} | {{ b.score }}% | {{ b.rating }} | {{ b.wind_mph }} mph | {{ b.temp_f }}°F | {{ b.uv }} |
+          {% endfor %}
+          {% else %}
+          No forecast data available.
+          {% endif %}
+
+      # -----------------------------------------------------------------------
+      # Best Window Highlight
+      # -----------------------------------------------------------------------
+      - type: custom:mushroom-template-card
+        primary: "Best Window Today"
+        secondary: >-
+          {% set best = state_attr('sensor.paddle_conditions_lake_austin_forecast_3hr', 'best_block') %}
+          {% set best_score = state_attr('sensor.paddle_conditions_lake_austin_forecast_3hr', 'best_score') %}
+          {% if best and best_score %}
+          {{ best }} — Score: {{ best_score }}%
+          {% else %}
+          No forecast data
+          {% endif %}
+        icon: mdi:star
+        icon_color: >-
+          {% set best_score = state_attr('sensor.paddle_conditions_lake_austin_forecast_3hr', 'best_score') %}
+          {% if best_score and best_score >= 70 %}green
+          {% elif best_score and best_score >= 40 %}orange
+          {% else %}red{% endif %}
+
+      # -----------------------------------------------------------------------
+      # ApexCharts: Wind Speed + Score Over Time
+      # -----------------------------------------------------------------------
+      # Requires apexcharts-card (HACS).
+      - type: custom:apexcharts-card
+        header:
+          title: Wind Speed & Score Forecast
+          show: true
+        graph_span: 24h
+        span:
+          start: hour
+        yaxis:
+          - id: score
+            min: 0
+            max: 100
+            apex_config:
+              title:
+                text: Score (%)
+          - id: wind
+            opposite: true
+            min: 0
+            apex_config:
+              title:
+                text: Wind (mph)
+        series:
+          - entity: sensor.paddle_conditions_lake_austin_score
+            name: Paddle Score
+            yaxis_id: score
+            color: "#4CAF50"
+            stroke_width: 3
+            curve: smooth
+          - entity: sensor.paddle_conditions_lake_austin_wind_speed
+            name: Wind Speed
+            yaxis_id: wind
+            color: "#2196F3"
+            stroke_width: 2
+            curve: stepline
+          - entity: sensor.paddle_conditions_lake_austin_wind_gusts
+            name: Wind Gusts
+            yaxis_id: wind
+            color: "#FF9800"
+            stroke_width: 1
+            opacity: 0.5
+            curve: stepline
+
+      # -- Fallback: standard history-graph if apexcharts is not installed --
+      # Uncomment below and comment out the apexcharts-card above.
+      # - type: history-graph
+      #   title: Wind Speed & Score (24h)
+      #   hours_to_show: 24
+      #   entities:
+      #     - entity: sensor.paddle_conditions_lake_austin_score
+      #       name: Score
+      #     - entity: sensor.paddle_conditions_lake_austin_wind_speed
+      #       name: Wind Speed
+      #     - entity: sensor.paddle_conditions_lake_austin_wind_gusts
+      #       name: Gusts
+
+      # -----------------------------------------------------------------------
+      # ApexCharts: Temperature + UV Forecast
+      # -----------------------------------------------------------------------
+      - type: custom:apexcharts-card
+        header:
+          title: Temperature & UV Forecast
+          show: true
+        graph_span: 24h
+        span:
+          start: hour
+        yaxis:
+          - id: temp
+            min: ~30
+            max: ~110
+            apex_config:
+              title:
+                text: "Temp (°F)"
+          - id: uv
+            opposite: true
+            min: 0
+            max: 12
+            apex_config:
+              title:
+                text: UV Index
+        series:
+          - entity: sensor.paddle_conditions_lake_austin_air_temp
+            name: Air Temp
+            yaxis_id: temp
+            color: "#F44336"
+            stroke_width: 2
+            curve: smooth
+          - entity: sensor.paddle_conditions_lake_austin_uv_index
+            name: UV Index
+            yaxis_id: uv
+            color: "#FF9800"
+            stroke_width: 2
+            curve: stepline
+
+  # ===========================================================================
+  # TAB 3: FITNESS (placeholder)
+  # ===========================================================================
+  - title: Fitness
+    path: fitness
+    icon: mdi:run-fast
+    badges: []
+    cards:
+
+      # -----------------------------------------------------------------------
+      # Strava Session Card (placeholder)
+      # -----------------------------------------------------------------------
+      - type: markdown
+        title: Recent Sessions
+        content: >-
+          **Strava integration coming soon.**
+
+
+          This tab will display your recent paddle sessions pulled from
+          Strava or manual logging, including distance, duration, and
+          average speed.
+
+      # -----------------------------------------------------------------------
+      # Progress Bars (placeholder)
+      # -----------------------------------------------------------------------
+      - type: markdown
+        title: Monthly Progress
+        content: >-
+          **Session tracking coming soon.**
+
+
+          Progress bars will show:
+
+          - Sessions this month vs. goal
+
+          - Total distance paddled
+
+          - Average session score
+
+      # -----------------------------------------------------------------------
+      # ApexCharts Speed Trend (placeholder)
+      # -----------------------------------------------------------------------
+      - type: markdown
+        title: Speed Trend
+        content: >-
+          **Performance charts coming soon.**
+
+
+          An ApexCharts line graph will display your average paddle speed
+          over time, helping you track fitness improvements across sessions.
+
+      # -----------------------------------------------------------------------
+      # Placeholder cards for future implementation:
+      # -----------------------------------------------------------------------
+      # When Strava or session logging is implemented, replace the markdown
+      # cards above with something like:
+      #
+      # - type: custom:apexcharts-card
+      #   header:
+      #     title: Speed Over Time
+      #     show: true
+      #   graph_span: 30d
+      #   series:
+      #     - entity: sensor.paddle_conditions_lake_austin_avg_speed
+      #       name: Avg Speed (mph)
+      #       curve: smooth
+      #
+      # - type: custom:mushroom-template-card
+      #   primary: "Sessions This Month"
+      #   secondary: "{{ states('sensor.paddle_sessions_monthly') }} / 12"
+      #   icon: mdi:calendar-check
+
+  # ===========================================================================
+  # TAB 4: HISTORY
+  # ===========================================================================
+  - title: History
+    path: history
+    icon: mdi:history
+    badges: []
+    cards:
+
+      # -----------------------------------------------------------------------
+      # Recent Sessions: Score History Graph (7 days)
+      # -----------------------------------------------------------------------
+      - type: history-graph
+        title: Paddle Score (7 Days)
+        hours_to_show: 168
+        entities:
+          - entity: sensor.paddle_conditions_lake_austin_score
+            name: Lake Austin Score
+          # Uncomment for additional spots:
+          # - entity: sensor.paddle_conditions_town_lake_score
+          #   name: Town Lake Score
+
+      # -----------------------------------------------------------------------
+      # Wind History (7 days)
+      # -----------------------------------------------------------------------
+      - type: history-graph
+        title: Wind Conditions (7 Days)
+        hours_to_show: 168
+        entities:
+          - entity: sensor.paddle_conditions_lake_austin_wind_speed
+            name: Wind Speed
+          - entity: sensor.paddle_conditions_lake_austin_wind_gusts
+            name: Wind Gusts
+
+      # -----------------------------------------------------------------------
+      # Environmental History (7 days)
+      # -----------------------------------------------------------------------
+      - type: history-graph
+        title: Environmental (7 Days)
+        hours_to_show: 168
+        entities:
+          - entity: sensor.paddle_conditions_lake_austin_air_temp
+            name: Air Temp
+          - entity: sensor.paddle_conditions_lake_austin_water_temp
+            name: Water Temp
+          - entity: sensor.paddle_conditions_lake_austin_aqi
+            name: AQI
+          - entity: sensor.paddle_conditions_lake_austin_uv_index
+            name: UV Index
+
+      # -----------------------------------------------------------------------
+      # Score Statistics (if statistics platform is configured)
+      # -----------------------------------------------------------------------
+      - type: statistics-graph
+        title: Score Statistics (7 Days)
+        entities:
+          - sensor.paddle_conditions_lake_austin_score
+        stat_types:
+          - mean
+          - min
+          - max
+        days_to_show: 7
+
+      # -----------------------------------------------------------------------
+      # Conditions Log
+      # -----------------------------------------------------------------------
+      - type: logbook
+        title: Condition Changes
+        hours_to_show: 168
+        entities:
+          - sensor.paddle_conditions_lake_austin_condition
+          - sensor.paddle_conditions_lake_austin_score

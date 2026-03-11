@@ -1,0 +1,19 @@
+{
+  "current": {
+    "wind_speed_10m": 8.5,
+    "wind_gusts_10m": 14.2,
+    "wind_direction_10m": 225,
+    "temperature_2m": 72.3,
+    "uv_index": 5.1,
+    "visibility": 24140.0,
+    "precipitation_probability": 10,
+    "weather_code": 2
+  },
+  "hourly": {
+    "time": ["2026-03-10T00:00", "2026-03-10T01:00"],
+    "wind_speed_10m": [5.0, 6.2],
+    "temperature_2m": [65.0, 66.5],
+    "uv_index": [0, 0.5],
+    "weather_code": [2, 3]
+  }
+}

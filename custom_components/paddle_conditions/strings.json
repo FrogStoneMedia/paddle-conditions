@@ -1,0 +1,73 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Paddle Conditions",
+        "description": "Set up Paddle Conditions. After setup, add your paddle locations."
+      }
+    },
+    "abort": {
+      "already_configured": "Already configured."
+    }
+  },
+  "config_subentries": {
+    "location": {
+      "initiate_flow": {
+        "user": "Add paddle location"
+      },
+      "step": {
+        "user": {
+          "title": "Add Paddle Location",
+          "data": {
+            "name": "Location name",
+            "latitude": "Latitude",
+            "longitude": "Longitude",
+            "water_body_type": "Water body type",
+            "display_order": "Display order",
+            "usgs_station_id": "USGS station ID (optional)",
+            "noaa_station_id": "NOAA station ID (optional)",
+            "optimal_cfs": "Optimal streamflow (CFS, for river locations)"
+          }
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Paddle Conditions Options",
+        "data": {
+          "activity": "Activity",
+          "profile": "Profile",
+          "update_interval": "Update interval (minutes)",
+          "weight_wind_speed": "Wind speed weight",
+          "weight_wind_gusts": "Wind gusts weight",
+          "weight_air_quality": "Air quality weight",
+          "weight_temperature": "Temperature weight",
+          "weight_uv_index": "UV index weight",
+          "weight_visibility": "Visibility weight",
+          "weight_precipitation": "Precipitation weight",
+          "cloud_sync_url": "Cloud sync URL (optional)",
+          "cloud_sync_token": "Cloud sync token (optional)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "paddle_score": {"name": "Paddle Score"},
+      "wind_speed": {"name": "Wind Speed"},
+      "wind_gusts": {"name": "Wind Gusts"},
+      "wind_direction": {"name": "Wind Direction"},
+      "air_temp": {"name": "Air Temperature"},
+      "water_temp": {"name": "Water Temperature"},
+      "uv_index": {"name": "UV Index"},
+      "aqi": {"name": "Air Quality Index"},
+      "visibility": {"name": "Visibility"},
+      "precipitation": {"name": "Precipitation Chance"},
+      "condition": {"name": "Conditions"},
+      "streamflow": {"name": "Streamflow"},
+      "forecast_3hr": {"name": "3-Hour Forecast"}
+    }
+  }
+}
