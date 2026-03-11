@@ -49,9 +49,7 @@ class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):  # type: ignor
         subentry_id: str,
         subentry: ConfigSubentry,
     ) -> None:
-        interval = config_entry.options.get(
-            "update_interval", DEFAULT_UPDATE_INTERVAL_MINUTES
-        )
+        interval = config_entry.options.get("update_interval", DEFAULT_UPDATE_INTERVAL_MINUTES)
         super().__init__(
             hass,
             LOGGER,
@@ -84,19 +82,16 @@ class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):  # type: ignor
         # Launch all API calls in parallel for faster updates
         weather_task = self.weather_client.fetch(self.latitude, self.longitude)
         aqi_task = self.aqi_client.fetch(self.latitude, self.longitude)
-        usgs_task = (
-            self.usgs_client.fetch(self.usgs_station_id)
-            if self.usgs_station_id
-            else asyncio.sleep(0)
-        )
+        usgs_task = self.usgs_client.fetch(self.usgs_station_id) if self.usgs_station_id else asyncio.sleep(0)
         noaa_task = (
-            self.noaa_client.fetch_water_temp(self.noaa_station_id)
-            if self.noaa_station_id
-            else asyncio.sleep(0)
+            self.noaa_client.fetch_water_temp(self.noaa_station_id) if self.noaa_station_id else asyncio.sleep(0)
         )
 
         results = await asyncio.gather(
-            weather_task, aqi_task, usgs_task, noaa_task,
+            weather_task,
+            aqi_task,
+            usgs_task,
+            noaa_task,
             return_exceptions=True,
         )
 

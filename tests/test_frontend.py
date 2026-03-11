@@ -49,9 +49,7 @@ async def test_async_setup_registers_when_running(mock_hass_running: MagicMock) 
 
 async def test_async_register_frontend_calls_static_paths(mock_hass_running: MagicMock) -> None:
     """_async_register_frontend registers static path and JS URL."""
-    with patch(
-        "custom_components.paddle_conditions.add_extra_js_url"
-    ) as mock_add_js:
+    with patch("custom_components.paddle_conditions.add_extra_js_url") as mock_add_js:
         await _async_register_frontend(mock_hass_running)
 
     # Verify static path registration was called
@@ -71,9 +69,7 @@ async def test_async_register_frontend_calls_static_paths(mock_hass_running: Mag
 
 async def test_async_register_frontend_url_has_version(mock_hass_running: MagicMock) -> None:
     """JS resource URL includes version string for cache-busting."""
-    with patch(
-        "custom_components.paddle_conditions.add_extra_js_url"
-    ) as mock_add_js:
+    with patch("custom_components.paddle_conditions.add_extra_js_url") as mock_add_js:
         await _async_register_frontend(mock_hass_running)
 
     js_url = mock_add_js.call_args[0][1]
@@ -82,9 +78,7 @@ async def test_async_register_frontend_url_has_version(mock_hass_running: MagicM
 
 async def test_async_setup_defers_when_not_running(mock_hass_starting: MagicMock) -> None:
     """When HA is not fully started, registration is deferred."""
-    with patch(
-        "custom_components.paddle_conditions._async_register_frontend"
-    ) as mock_register:
+    with patch("custom_components.paddle_conditions._async_register_frontend") as mock_register:
         result = await async_setup(mock_hass_starting, {})
 
     assert result is True
@@ -97,12 +91,7 @@ async def test_manifest_has_frontend_dependency() -> None:
     import json
     from pathlib import Path
 
-    manifest_path = (
-        Path(__file__).parent.parent
-        / "custom_components"
-        / "paddle_conditions"
-        / "manifest.json"
-    )
+    manifest_path = Path(__file__).parent.parent / "custom_components" / "paddle_conditions" / "manifest.json"
     manifest = json.loads(manifest_path.read_text())
     assert "frontend" in manifest["dependencies"]
     assert "http" in manifest["dependencies"]
