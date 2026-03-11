@@ -7,8 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from homeassistant.core import CoreState
 
-from custom_components.paddle_conditions import async_setup, _async_register_frontend
-from custom_components.paddle_conditions.const import DOMAIN
+from custom_components.paddle_conditions import _async_register_frontend, async_setup
 
 
 @pytest.fixture
