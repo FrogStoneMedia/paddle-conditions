@@ -36,12 +36,12 @@ Available cards:
 
 ## Scoring
 
-See [docs/SCORING.md](docs/SCORING.md) for how the Paddle Score works and how to customize it.
+Seven weighted factors — wind speed, wind gusts, AQI, temperature, UV index, visibility, and precipitation — are combined into a single Paddle Score. Choose from built-in profiles (Recreational, Racing, Family for SUP; Flatwater, River, Ocean for kayaking) or customize the weights in the integration options. Hard vetoes trigger automatically for dangerous conditions like lightning.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
+See [CONTRIBUTING.md](https://github.com/FrogStoneMedia/paddle-conditions/blob/main/CONTRIBUTING.md) for development setup and guidelines.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](https://github.com/FrogStoneMedia/paddle-conditions/blob/main/LICENSE).
