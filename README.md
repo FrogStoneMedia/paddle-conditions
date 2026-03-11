@@ -1,4 +1,4 @@
-# <img src="https://brands.home-assistant.io/_/paddle_conditions/icon.png" alt="Paddle Conditions" width="50" height="50"/> Paddle Conditions
+# <img src="custom_components/paddle_conditions/brand/icon.png" alt="Paddle Conditions" width="50" height="50"/> Paddle Conditions
 
 [![License](https://img.shields.io/github/license/FrogStoneMedia/paddle-conditions?style=for-the-badge)](https://opensource.org/licenses/MIT)
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=for-the-badge)](https://github.com/custom-components/hacs)
