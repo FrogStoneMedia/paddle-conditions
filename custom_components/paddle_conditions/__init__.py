@@ -30,8 +30,8 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         await _async_register_frontend(hass)
     else:
 
-        def _on_started(_event: Event[Any]) -> None:
-            hass.async_create_task(_async_register_frontend(hass))
+        async def _on_started(_event: Event[Any]) -> None:
+            await _async_register_frontend(hass)
 
         hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _on_started)
 
