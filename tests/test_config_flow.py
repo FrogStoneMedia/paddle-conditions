@@ -34,36 +34,47 @@ async def test_config_flow_single_instance(hass: HomeAssistant):
     assert result["reason"] == "already_configured"
 
 
-async def test_location_subentry_flow(hass: HomeAssistant):
-    """Test adding a location via subentry flow."""
-    # First create the config entry
+async def test_location_subentry_flow_with_preset(hass: HomeAssistant):
+    """Test adding a location via preset selection."""
     result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
     result = await hass.config_entries.flow.async_configure(result["flow_id"], user_input={})
     entry = result["result"]
 
-    # Now add a location subentry
+    # Start subentry flow — first step is preset selection
     result = await hass.config_entries.subentries.async_init(
         (entry.entry_id, "location"),
         context={"source": config_entries.SOURCE_USER},
     )
     assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "user"
 
+    # Select a preset
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"],
+        user_input={"preset": "lake_natoma"},
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "location"
+
+    # Confirm pre-filled location details
     result = await hass.config_entries.subentries.async_configure(
         result["flow_id"],
         user_input={
             "name": "Lake Natoma",
-            "latitude": 38.637,
-            "longitude": -121.227,
+            "latitude": 38.636,
+            "longitude": -121.185,
             "water_body_type": "lake",
             "display_order": 0,
+            "usgs_station_id": "11446220",
+            "noaa_station_id": "",
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["title"] == "Lake Natoma"
 
 
-async def test_location_subentry_flow_with_optional_fields(hass: HomeAssistant):
-    """Test adding a location with optional USGS/NOAA station IDs."""
+async def test_location_subentry_flow_custom(hass: HomeAssistant):
+    """Test adding a custom location without a preset."""
     result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
     result = await hass.config_entries.flow.async_configure(result["flow_id"], user_input={})
     entry = result["result"]
@@ -72,6 +83,16 @@ async def test_location_subentry_flow_with_optional_fields(hass: HomeAssistant):
         (entry.entry_id, "location"),
         context={"source": config_entries.SOURCE_USER},
     )
+
+    # Select custom location
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"],
+        user_input={"preset": "custom"},
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "location"
+
+    # Enter location details manually
     result = await hass.config_entries.subentries.async_configure(
         result["flow_id"],
         user_input={

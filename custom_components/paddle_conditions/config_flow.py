@@ -53,6 +53,7 @@ from .const import (
     WATER_BODY_LAKE,
     WATER_BODY_RIVER,
 )
+from .presets import PRESET_CUSTOM, PRESET_LOCATIONS
 
 
 class PaddleConfigFlow(ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg, misc]
@@ -87,8 +88,40 @@ class PaddleConfigFlow(ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg, mis
 class LocationSubentryFlow(ConfigSubentryFlow):  # type: ignore[misc]
     """Handle adding a paddle location."""
 
+    _preset_defaults: dict[str, str | float] | None = None
+
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:
-        """Handle location subentry creation."""
+        """Handle preset selection."""
+        if user_input is not None:
+            preset_key = user_input.get("preset", PRESET_CUSTOM)
+            if preset_key != PRESET_CUSTOM and preset_key in PRESET_LOCATIONS:
+                self._preset_defaults = dict(PRESET_LOCATIONS[preset_key])
+            else:
+                self._preset_defaults = None
+            return await self.async_step_location()
+
+        preset_options = [
+            {"value": key, "label": data[CONF_NAME]}
+            for key, data in PRESET_LOCATIONS.items()
+        ]
+        preset_options.append({"value": PRESET_CUSTOM, "label": "Custom location"})
+
+        return self.async_show_form(
+            step_id="user",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("preset", default=list(PRESET_LOCATIONS)[0]): SelectSelector(
+                        SelectSelectorConfig(
+                            options=preset_options,
+                            mode=SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                }
+            ),
+        )
+
+    async def async_step_location(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:
+        """Handle location details."""
         if user_input is not None:
             user_input.setdefault(CONF_USGS_STATION_ID, "")
             user_input.setdefault(CONF_NOAA_STATION_ID, "")
@@ -96,14 +129,19 @@ class LocationSubentryFlow(ConfigSubentryFlow):  # type: ignore[misc]
             user_input.setdefault(CONF_OPTIMAL_CFS, None)
             return self.async_create_entry(title=user_input[CONF_NAME], data=user_input)
 
+        defaults = self._preset_defaults or {}
+
         return self.async_show_form(
-            step_id="user",
+            step_id="location",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_NAME): str,
-                    vol.Required(CONF_LATITUDE): cv.latitude,
-                    vol.Required(CONF_LONGITUDE): cv.longitude,
-                    vol.Required(CONF_WATER_BODY_TYPE): SelectSelector(
+                    vol.Required(CONF_NAME, default=defaults.get(CONF_NAME, "")): str,
+                    vol.Required(CONF_LATITUDE, default=defaults.get(CONF_LATITUDE)): cv.latitude,
+                    vol.Required(CONF_LONGITUDE, default=defaults.get(CONF_LONGITUDE)): cv.longitude,
+                    vol.Required(
+                        CONF_WATER_BODY_TYPE,
+                        default=defaults.get(CONF_WATER_BODY_TYPE, WATER_BODY_LAKE),
+                    ): SelectSelector(
                         SelectSelectorConfig(
                             options=[
                                 {"value": WATER_BODY_LAKE, "label": "Lake / Reservoir"},
@@ -113,9 +151,15 @@ class LocationSubentryFlow(ConfigSubentryFlow):  # type: ignore[misc]
                             mode=SelectSelectorMode.DROPDOWN,
                         )
                     ),
-                    vol.Optional(CONF_DISPLAY_ORDER, default=0): int,
-                    vol.Optional(CONF_USGS_STATION_ID, default=""): str,
-                    vol.Optional(CONF_NOAA_STATION_ID, default=""): str,
+                    vol.Optional(CONF_DISPLAY_ORDER, default=int(defaults.get(CONF_DISPLAY_ORDER, 0))): int,
+                    vol.Optional(
+                        CONF_USGS_STATION_ID,
+                        default=str(defaults.get(CONF_USGS_STATION_ID, "")),
+                    ): str,
+                    vol.Optional(
+                        CONF_NOAA_STATION_ID,
+                        default=str(defaults.get(CONF_NOAA_STATION_ID, "")),
+                    ): str,
                     vol.Optional(CONF_OPTIMAL_CFS): NumberSelector(
                         NumberSelectorConfig(
                             min=0,

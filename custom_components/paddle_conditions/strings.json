@@ -18,7 +18,17 @@
       "step": {
         "user": {
           "title": "Add Paddle Location",
-          "description": "Add a paddle spot to monitor. After adding, you'll see sensors for paddle score, wind, temperature, UV, AQI, and more. You can customize scoring weights in the integration options.",
+          "description": "Pick a preset location to start with pre-filled coordinates and station IDs, or choose \"Custom location\" to enter everything yourself.",
+          "data": {
+            "preset": "Location"
+          },
+          "data_description": {
+            "preset": "Preset locations include coordinates and USGS station IDs where available"
+          }
+        },
+        "location": {
+          "title": "Location Details",
+          "description": "Confirm or edit the details for this paddle spot. After adding, you'll see sensors for paddle score, wind, temperature, UV, AQI, and more.",
           "data": {
             "name": "Location name",
             "latitude": "Latitude",
@@ -30,9 +40,9 @@
             "optimal_cfs": "Optimal streamflow (CFS)"
           },
           "data_description": {
-            "name": "A friendly name for this spot, e.g. \"Lake Union\" or \"Deschutes River\"",
-            "latitude": "Decimal degrees, e.g. 47.6280. Tip: find coordinates on Google Maps by right-clicking a location.",
-            "longitude": "Decimal degrees, e.g. -122.3340",
+            "name": "A friendly name for this spot, e.g. \"Lake Natoma\" or \"Deschutes River\"",
+            "latitude": "Decimal degrees, e.g. 38.6360. Tip: find coordinates on Google Maps by right-clicking a location.",
+            "longitude": "Decimal degrees, e.g. -121.1850",
             "water_body_type": "Determines which data sources and scoring factors apply",
             "display_order": "Lower numbers appear first when you have multiple locations (0 = default)",
             "usgs_station_id": "For river streamflow data. Find your station at waterdata.usgs.gov",

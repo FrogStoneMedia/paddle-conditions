@@ -1,7 +1,7 @@
 {
   "domain": "paddle_conditions",
   "name": "Paddle Conditions",
-  "codeowners": ["@FrogStoneMedia"],
+  "codeowners": ["@michaelkahn"],
   "config_flow": true,
   "dependencies": ["frontend", "http"],
   "documentation": "https://github.com/FrogStoneMedia/paddle-conditions",
