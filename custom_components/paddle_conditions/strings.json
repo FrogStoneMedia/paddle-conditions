@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Paddle Conditions",
-        "description": "Set up Paddle Conditions. After setup, add your paddle locations."
+        "description": "Paddle Conditions scores your favorite paddle spots using wind, air quality, temperature, UV, visibility, and precipitation data — so you know at a glance whether it's a Go, Caution, or No-go day.\n\nAfter setup, you'll add one or more paddle locations. For each location you'll need:\n- **Coordinates** (latitude and longitude)\n- **Water body type** (lake, river, or bay/ocean)\n- **USGS station ID** (optional, for river flow data)\n- **NOAA station ID** (optional, for water temperature)\n\nAll weather and air quality data is fetched automatically from free public APIs."
       }
     },
     "abort": {
@@ -18,15 +18,26 @@
       "step": {
         "user": {
           "title": "Add Paddle Location",
+          "description": "Add a paddle spot to monitor. After adding, you'll see sensors for paddle score, wind, temperature, UV, AQI, and more. You can customize scoring weights in the integration options.",
           "data": {
             "name": "Location name",
             "latitude": "Latitude",
             "longitude": "Longitude",
             "water_body_type": "Water body type",
             "display_order": "Display order",
-            "usgs_station_id": "USGS station ID (optional)",
-            "noaa_station_id": "NOAA station ID (optional)",
-            "optimal_cfs": "Optimal streamflow (CFS, for river locations)"
+            "usgs_station_id": "USGS station ID",
+            "noaa_station_id": "NOAA station ID",
+            "optimal_cfs": "Optimal streamflow (CFS)"
+          },
+          "data_description": {
+            "name": "A friendly name for this spot, e.g. \"Lake Union\" or \"Deschutes River\"",
+            "latitude": "Decimal degrees, e.g. 47.6280. Tip: find coordinates on Google Maps by right-clicking a location.",
+            "longitude": "Decimal degrees, e.g. -122.3340",
+            "water_body_type": "Determines which data sources and scoring factors apply",
+            "display_order": "Lower numbers appear first when you have multiple locations (0 = default)",
+            "usgs_station_id": "For river streamflow data. Find your station at waterdata.usgs.gov",
+            "noaa_station_id": "For water temperature data. Find your station at tidesandcurrents.noaa.gov",
+            "optimal_cfs": "Your preferred river flow in cubic feet per second. Only used for river locations."
           }
         }
       }
@@ -36,6 +47,7 @@
     "step": {
       "init": {
         "title": "Paddle Conditions Options",
+        "description": "Customize how conditions are scored. Choose your activity and profile to start with recommended weights, then fine-tune individual factors. Weights are automatically normalized to 100%.",
         "data": {
           "activity": "Activity",
           "profile": "Profile",
@@ -49,6 +61,11 @@
           "weight_precipitation": "Precipitation weight",
           "cloud_sync_url": "Cloud sync URL (optional)",
           "cloud_sync_token": "Cloud sync token (optional)"
+        },
+        "data_description": {
+          "activity": "Switch between paddle boarding and kayaking — each has its own scoring profiles",
+          "profile": "Preset weight configurations tuned for different paddling styles",
+          "update_interval": "How often to refresh weather and condition data from APIs"
         }
       }
     }
