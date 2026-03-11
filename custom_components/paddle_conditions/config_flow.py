@@ -110,7 +110,7 @@ class LocationSubentryFlow(ConfigSubentryFlow):  # type: ignore[misc]
             step_id="user",
             data_schema=vol.Schema(
                 {
-                    vol.Required("preset", default=list(PRESET_LOCATIONS)[0]): SelectSelector(
+                    vol.Required("preset", default=next(iter(PRESET_LOCATIONS))): SelectSelector(
                         SelectSelectorConfig(
                             options=preset_options,
                             mode=SelectSelectorMode.DROPDOWN,
