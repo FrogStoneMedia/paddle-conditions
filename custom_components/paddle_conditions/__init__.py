@@ -7,6 +7,7 @@ from typing import Any
 
 from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
+from homeassistant.components.persistent_notification import async_create as pn_async_create
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, Platform
 from homeassistant.core import CoreState, Event, HomeAssistant
 from homeassistant.helpers.typing import ConfigType
@@ -63,7 +64,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: PaddleConfigEntry) -> bo
     # Generate dashboard YAML for configured locations
     dashboard_path = await hass.async_add_executor_job(write_dashboard, entry.subentries)
     if dashboard_path:
-        hass.components.persistent_notification.async_create(
+        pn_async_create(
+            hass,
             "Your Paddle Conditions dashboard has been generated with all your "
             "configured locations.\n\n"
             "**To import it:**\n"
