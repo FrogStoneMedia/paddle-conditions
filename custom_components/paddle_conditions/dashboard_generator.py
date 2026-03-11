@@ -6,13 +6,25 @@ from homeassistant.util import slugify
 
 from .const import CONF_NAME, SUBENTRY_TYPE_LOCATION
 
+# Rotate icons so each location tab is visually distinct
+_LOCATION_ICONS = [
+    "mdi:kayaking",
+    "mdi:sail-boat",
+    "mdi:waves",
+    "mdi:fish",
+    "mdi:map-marker",
+    "mdi:pine-tree",
+    "mdi:weather-sunny",
+    "mdi:compass",
+]
+
 
 def _entity_id(location_slug: str, sensor_key: str) -> str:
     """Build the expected entity ID for a location sensor."""
     return f"sensor.{location_slug}_{sensor_key}"
 
 
-def _location_view(name: str, slug: str) -> str:
+def _location_view(name: str, slug: str, icon: str) -> str:
     """Generate a detail view for one location."""
     score = _entity_id(slug, "paddle_score")
     wind = _entity_id(slug, "wind_speed")
@@ -30,8 +42,10 @@ def _location_view(name: str, slug: str) -> str:
 
     return f"""  - title: "{name}"
     path: {path}
-    icon: mdi:kayaking
+    icon: {icon}
     cards:
+      - type: markdown
+        content: "# {name}"
       - type: gauge
         entity: {score}
         name: Paddle Score
@@ -104,16 +118,20 @@ def generate_dashboard_yaml(
 
     # Overview tab when multiple locations
     if len(locations) > 1:
-        views += "  - title: Overview\n    path: overview\n    icon: mdi:map-marker-multiple\n    cards:\n"
+        views += "  - title: Overview\n    path: overview\n    icon: mdi:view-dashboard\n    cards:\n"
         for name, slug in locations:
             score = _entity_id(slug, "paddle_score")
             condition = _entity_id(slug, "conditions")
             wind = _entity_id(slug, "wind_speed")
+            aqi = _entity_id(slug, "air_quality_index")
+            air_temp = _entity_id(slug, "air_temperature")
             views += f"""      - type: vertical-stack
         cards:
+          - type: markdown
+            content: "### {name}"
           - type: gauge
             entity: {score}
-            name: "{name}"
+            name: Paddle Score
             min: 0
             max: 100
             severity:
@@ -126,10 +144,15 @@ def generate_dashboard_yaml(
                 name: Conditions
               - entity: {wind}
                 name: Wind
+              - entity: {aqi}
+                name: AQI
+              - entity: {air_temp}
+                name: Temp
 """
 
-    # Per-location detail views
-    for name, slug in locations:
-        views += _location_view(name, slug)
+    # Per-location detail views with rotating icons
+    for i, (name, slug) in enumerate(locations):
+        icon = _LOCATION_ICONS[i % len(_LOCATION_ICONS)]
+        views += _location_view(name, slug, icon)
 
     return views
