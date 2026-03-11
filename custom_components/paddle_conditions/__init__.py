@@ -7,14 +7,20 @@ from typing import Any
 
 from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
-from homeassistant.components.persistent_notification import async_create as pn_async_create
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, Platform
-from homeassistant.core import CoreState, Event, HomeAssistant
+from homeassistant.core import (
+    CoreState,
+    Event,
+    HomeAssistant,
+    ServiceCall,
+    ServiceResponse,
+    SupportsResponse,
+)
 from homeassistant.helpers.typing import ConfigType
 
 from .const import DOMAIN, SUBENTRY_TYPE_LOCATION
 from .coordinator import PaddleConfigEntry, PaddleCoordinator
-from .dashboard_generator import write_dashboard
+from .dashboard_generator import generate_dashboard_yaml
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 
@@ -22,6 +28,8 @@ _FRONTEND_DIR: str = str(Path(__file__).parent / "frontend" / "dist")
 _FRONTEND_URL_BASE: str = f"/{DOMAIN}/frontend"
 _JS_FILENAME: str = "paddle-cards.js"
 _VERSION: str = "1.0.0"
+
+SERVICE_GET_DASHBOARD = "get_dashboard_yaml"
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
@@ -59,23 +67,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: PaddleConfigEntry) -> bo
     entry.runtime_data = coordinators
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # Generate dashboard YAML for configured locations
-    dashboard_path = await hass.async_add_executor_job(write_dashboard, entry.subentries)
-    if dashboard_path:
-        pn_async_create(
-            hass,
-            "Your Paddle Conditions dashboard has been generated with all your "
-            "configured locations.\n\n"
-            "**To import it:**\n"
-            "1. Go to **Settings → Dashboards → Add Dashboard**\n"
-            "2. Create a new dashboard, then open it\n"
-            "3. Click the three-dot menu → **Edit Dashboard** → three-dot menu → "
-            "**Raw configuration editor**\n"
-            "4. Paste the contents of:\n"
-            f"`{dashboard_path}`\n\n"
-            "The dashboard is regenerated each time you add or remove a location.",
-            title="Paddle Conditions Dashboard Ready",
-            notification_id=f"{DOMAIN}_dashboard",
+    # Register dashboard YAML service
+    if not hass.services.has_service(DOMAIN, SERVICE_GET_DASHBOARD):
+
+        def handle_get_dashboard(call: ServiceCall) -> ServiceResponse:
+            """Return generated dashboard YAML for all configured locations."""
+            entries = hass.config_entries.async_entries(DOMAIN)
+            all_subentries: dict = {}
+            for cfg_entry in entries:
+                all_subentries.update(cfg_entry.subentries)
+            yaml_content = generate_dashboard_yaml(all_subentries)
+            return {"yaml": yaml_content}
+
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_GET_DASHBOARD,
+            handle_get_dashboard,
+            supports_response=SupportsResponse.ONLY,
         )
 
     # Reload on subentry changes (add/remove locations)

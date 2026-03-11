@@ -1,0 +1,6 @@
+get_dashboard_yaml:
+  name: Get dashboard YAML
+  description: >-
+    Returns a complete Lovelace dashboard YAML configuration generated from
+    your configured paddle locations. Copy the YAML output and paste it into
+    a new dashboard's Raw Configuration Editor.
