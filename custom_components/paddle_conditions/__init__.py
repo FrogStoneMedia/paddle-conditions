@@ -11,7 +11,7 @@ from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, Platform
 from homeassistant.core import CoreState, Event, HomeAssistant
 from homeassistant.helpers.typing import ConfigType
 
-from .const import DOMAIN, SUBENTRY_TYPE_LOCATION  # noqa: F401
+from .const import DOMAIN, SUBENTRY_TYPE_LOCATION
 from .coordinator import PaddleConfigEntry, PaddleCoordinator
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]
