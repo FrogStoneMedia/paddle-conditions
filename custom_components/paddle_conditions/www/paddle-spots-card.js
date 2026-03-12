@@ -166,7 +166,9 @@ class PaddleSpotsCard extends HTMLElement {
   }
 }
 
-customElements.define("paddle-spots-card", PaddleSpotsCard);
+if (!customElements.get("paddle-spots-card")) {
+  customElements.define("paddle-spots-card", PaddleSpotsCard);
+}
 
 window.customCards = window.customCards || [];
 window.customCards.push({

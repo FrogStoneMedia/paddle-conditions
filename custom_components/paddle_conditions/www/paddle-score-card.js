@@ -594,7 +594,9 @@ class PaddleScoreCard extends HTMLElement {
   }
 }
 
-customElements.define("paddle-score-card", PaddleScoreCard);
+if (!customElements.get("paddle-score-card")) {
+  customElements.define("paddle-score-card", PaddleScoreCard);
+}
 
 window.customCards = window.customCards || [];
 window.customCards.push({
