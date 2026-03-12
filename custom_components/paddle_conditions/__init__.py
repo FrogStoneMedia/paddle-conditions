@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
-from homeassistant.const import Platform
+import json
+from pathlib import Path
+
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, Platform
 from homeassistant.core import (
+    CoreState,
+    Event,
     HomeAssistant,
     ServiceCall,
     ServiceResponse,
@@ -19,9 +24,43 @@ PLATFORMS: list[Platform] = [Platform.SENSOR]
 
 SERVICE_GET_DASHBOARD = "get_dashboard_yaml"
 
+_CARDS_DIR = Path(__file__).parent / "www"
+_MANIFEST = json.loads((Path(__file__).parent / "manifest.json").read_text())
+_VERSION = _MANIFEST["version"]
+
+_CARD_FILES = ["paddle-score-card.js", "paddle-spots-card.js"]
+
+
+async def _async_register_frontend(hass: HomeAssistant) -> None:
+    """Register static paths and Lovelace resources for custom cards."""
+    from homeassistant.components.frontend import add_extra_js_url
+    from homeassistant.components.http import StaticPathConfig
+
+    configs = [
+        StaticPathConfig(
+            url_path=f"/paddle_conditions/{card_file}",
+            path=str(_CARDS_DIR / card_file),
+            cache_headers=True,
+        )
+        for card_file in _CARD_FILES
+    ]
+    await hass.http.async_register_static_paths(configs)
+
+    for card_file in _CARD_FILES:
+        add_extra_js_url(hass, f"/paddle_conditions/{card_file}?v={_VERSION}")
+
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the Paddle Conditions domain."""
+    if hass.state is CoreState.running:
+        await _async_register_frontend(hass)
+    else:
+
+        async def _on_started(event: Event) -> None:
+            await _async_register_frontend(hass)
+
+        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _on_started)
+
     return True
 
 
