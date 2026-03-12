@@ -182,9 +182,22 @@ class PaddleScoreCard extends HTMLElement {
     this.shadowRoot.appendChild(card);
   }
 
+  _dayLabel(date) {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const diff = (target - today) / 86400000;
+    if (diff === 0) return "Today";
+    if (diff === 1) return "Tomorrow";
+    return date.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+  }
+
   _buildHero(name, score, rating, blocks) {
     const hero = this._el("div", { className: "hero", style: { background: this._ratingGradient(rating) } });
     hero.appendChild(this._el("div", { className: "hero-name", textContent: name }));
+
+    const dateStr = this._dayLabel(new Date());
+    hero.appendChild(this._el("div", { className: "hero-date", textContent: dateStr }));
     hero.appendChild(this._el("div", { className: "hero-score", textContent: isNaN(score) ? "\u2014" : String(score) }));
     hero.appendChild(this._el("div", { className: "hero-rating", textContent: this._ratingLabel(rating) }));
 
@@ -319,12 +332,21 @@ class PaddleScoreCard extends HTMLElement {
     const from = win ? new Date(win.sunrise.getTime() - 60 * 60 * 1000) : null;
     const to = win ? new Date(win.sunset.getTime() + 60 * 60 * 1000) : null;
 
+    let lastDay = null;
     for (let i = 0; i < times.length && i < hfm.arr.length; i++) {
       const t = new Date(times[i]);
       if (from && (t < from || t > to)) continue;
 
       const val = hfm.arr[i];
       if (val == null) continue;
+
+      // Insert day divider when date changes
+      const dayKey = t.toDateString();
+      if (lastDay !== null && dayKey !== lastDay) {
+        const divider = this._el("div", { className: "ff-day-divider", textContent: this._dayLabel(t) });
+        container.appendChild(divider);
+      }
+      lastDay = dayKey;
 
       const isCurrent = now >= t && now < new Date(t.getTime() + 60 * 60 * 1000);
       const displayVal = hfm.unit === "\u00B0F" ? `${Math.round(val)}${hfm.unit}` :
@@ -347,7 +369,8 @@ class PaddleScoreCard extends HTMLElement {
     if (!displayBlocks.length) return null;
 
     const section = this._el("div", { className: "forecast-section" });
-    section.appendChild(this._el("div", { className: "forecast-title", textContent: "Forecast" }));
+    const forecastDay = displayBlocks.length > 0 ? this._dayLabel(new Date(displayBlocks[0].start)) : "";
+    section.appendChild(this._el("div", { className: "forecast-title", textContent: `Forecast \u2014 ${forecastDay}` }));
 
     const row = this._el("div", { className: "forecast-row" });
     const now = new Date();
@@ -421,6 +444,11 @@ class PaddleScoreCard extends HTMLElement {
         text-transform: uppercase;
         letter-spacing: 1.5px;
         opacity: 0.9;
+        margin-bottom: 4px;
+      }
+      .hero-date {
+        font-size: 12px;
+        opacity: 0.75;
         margin-bottom: 4px;
       }
       .hero-score {
@@ -548,6 +576,19 @@ class PaddleScoreCard extends HTMLElement {
         font-size: 13px;
         font-weight: 600;
         color: var(--primary-text-color, #e0e0e0);
+      }
+      .ff-day-divider {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--primary-color, #4fc3f7);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding: 0 4px;
+        writing-mode: vertical-rl;
+        text-orientation: mixed;
       }
 
       .forecast-section { padding: 12px; }
