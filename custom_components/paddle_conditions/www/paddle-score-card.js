@@ -5,6 +5,7 @@ class PaddleScoreCard extends HTMLElement {
     this._hass = null;
     this._config = null;
     this._expandedBlock = null;
+    this._expandedFactor = null;
   }
 
   setConfig(config) {
@@ -54,7 +55,7 @@ class PaddleScoreCard extends HTMLElement {
   }
 
   _ratingLabel(rating) {
-    return { GO: "GO", CAUTION: "CAUTION", NO_GO: "NO GO" }[rating] || "—";
+    return { GO: "GO", CAUTION: "CAUTION", NO_GO: "NO GO" }[rating] || "\u2014";
   }
 
   getCardSize() { return 6; }
@@ -106,7 +107,7 @@ class PaddleScoreCard extends HTMLElement {
 
     const score = parseInt(scoreEntity.state, 10);
     const attrs = scoreEntity.attributes || {};
-    const rating = attrs.rating || "—";
+    const rating = attrs.rating || "\u2014";
     const limitingFactor = attrs.limiting_factor;
     const factors = attrs.factors || {};
     const name = (attrs.friendly_name || "").replace(/ Paddle Score$/i, "");
@@ -119,7 +120,7 @@ class PaddleScoreCard extends HTMLElement {
 
     const card = this._el("ha-card");
     card.appendChild(this._buildHero(name, score, rating, limitingFactor, factors));
-    card.appendChild(this._buildFactorGrid(factors));
+    card.appendChild(this._buildFactorGrid(factors, blocks));
     const forecast = this._buildForecast(blocks);
     if (forecast) card.appendChild(forecast);
 
@@ -129,7 +130,7 @@ class PaddleScoreCard extends HTMLElement {
   _buildHero(name, score, rating, limitingFactor, factors) {
     const hero = this._el("div", { className: "hero", style: { background: this._ratingGradient(rating) } });
     hero.appendChild(this._el("div", { className: "hero-name", textContent: name }));
-    hero.appendChild(this._el("div", { className: "hero-score", textContent: isNaN(score) ? "—" : String(score) }));
+    hero.appendChild(this._el("div", { className: "hero-score", textContent: isNaN(score) ? "\u2014" : String(score) }));
     hero.appendChild(this._el("div", { className: "hero-rating", textContent: this._ratingLabel(rating) }));
 
     if (limitingFactor) {
@@ -141,7 +142,14 @@ class PaddleScoreCard extends HTMLElement {
     return hero;
   }
 
-  _buildFactorGrid(factors) {
+  _buildFactorGrid(factors, blocks) {
+    // Maps factor keys to forecast block fields for daily drill-down
+    const blockFieldMap = {
+      wind_speed: { field: "wind_mph", unit: "mph", label: "Wind" },
+      temperature: { field: "temp_f", unit: "\u00B0F", label: "Temp" },
+      uv_index: { field: "uv", unit: "", label: "UV" },
+    };
+
     const meta = [
       { key: "wind_speed", icon: "\uD83D\uDCA8", label: "Wind", suffix: "wind_speed", gustSuffix: "wind_gusts", dirSuffix: "wind_direction", unit: "mph" },
       { key: "air_quality", icon: "\uD83C\uDF2C\uFE0F", label: "Air Quality", suffix: "air_quality_index", unit: "AQI" },
@@ -157,8 +165,8 @@ class PaddleScoreCard extends HTMLElement {
       if (factors[f.key] == null) continue;
       const subScore = factors[f.key];
       const entity = this._entity(f.suffix);
-      let rawVal = entity ? entity.state : "—";
-      if (f.round != null && rawVal !== "—" && !isNaN(parseFloat(rawVal))) {
+      let rawVal = entity ? entity.state : "\u2014";
+      if (f.round != null && rawVal !== "\u2014" && !isNaN(parseFloat(rawVal))) {
         rawVal = parseFloat(rawVal).toFixed(f.round);
       }
       let detail = `${rawVal}${f.unit ? " " + f.unit : ""}`;
@@ -175,11 +183,19 @@ class PaddleScoreCard extends HTMLElement {
           detail += ` / Water: ${waterEntity.state}${f.unit}`;
       }
 
-      const tile = this._el("div", { className: "factor-tile" });
+      const isExpanded = this._expandedFactor === f.key;
+      const hasForecast = blockFieldMap[f.key] && blocks.length > 0;
+
+      const tile = this._el("div", {
+        className: `factor-tile${isExpanded ? " factor-expanded" : ""}${hasForecast ? " factor-clickable" : ""}`,
+      });
 
       const header = this._el("div", { className: "factor-header" });
       header.appendChild(this._el("span", { className: "factor-icon", textContent: f.icon }));
       header.appendChild(this._el("span", { className: "factor-label", textContent: f.label }));
+      if (hasForecast) {
+        header.appendChild(this._el("span", { className: "factor-chevron", textContent: isExpanded ? "\u25B2" : "\u25BC" }));
+      }
       tile.appendChild(header);
 
       tile.appendChild(this._el("div", { className: "factor-value", textContent: detail }));
@@ -190,9 +206,48 @@ class PaddleScoreCard extends HTMLElement {
 
       tile.appendChild(this._el("div", { className: "factor-score", style: { color: this._scoreColor(subScore) }, textContent: `${subScore}/100` }));
 
+      // Forecast drill-down when expanded
+      if (isExpanded && hasForecast) {
+        const bfm = blockFieldMap[f.key];
+        tile.appendChild(this._buildFactorForecast(blocks, bfm));
+      }
+
+      if (hasForecast) {
+        tile.addEventListener("click", () => {
+          this._expandedFactor = this._expandedFactor === f.key ? null : f.key;
+          this._render();
+        });
+      }
+
       grid.appendChild(tile);
     }
     return grid;
+  }
+
+  _buildFactorForecast(blocks, bfm) {
+    const container = this._el("div", { className: "factor-forecast" });
+    const now = new Date();
+
+    for (const b of blocks) {
+      const start = new Date(b.start);
+      const end = new Date(b.end);
+      const isCurrent = now >= start && now < end;
+      const val = b[bfm.field];
+      if (val == null) continue;
+
+      const displayVal = bfm.unit === "\u00B0F" ? `${Math.round(val)}${bfm.unit}` :
+                         bfm.unit ? `${Math.round(val)} ${bfm.unit}` :
+                         String(Math.round(val * 10) / 10);
+      const timeLabel = start.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+
+      const item = this._el("div", { className: `ff-item${isCurrent ? " ff-current" : ""}` });
+      item.appendChild(this._el("div", { className: "ff-time", textContent: timeLabel }));
+      item.appendChild(this._el("div", { className: "ff-val", textContent: displayVal }));
+
+      container.appendChild(item);
+    }
+
+    return container;
   }
 
   _buildForecast(blocks) {
@@ -306,6 +361,18 @@ class PaddleScoreCard extends HTMLElement {
         background: var(--primary-background-color, #2a2a3e);
         border-radius: 8px;
         padding: 10px;
+        transition: border-color 0.2s;
+        border: 1px solid transparent;
+      }
+      .factor-clickable {
+        cursor: pointer;
+      }
+      .factor-clickable:hover {
+        border-color: rgba(255,255,255,0.15);
+      }
+      .factor-expanded {
+        grid-column: 1 / -1;
+        border-color: var(--primary-color, #4fc3f7);
       }
       .factor-header {
         display: flex;
@@ -320,6 +387,11 @@ class PaddleScoreCard extends HTMLElement {
         color: var(--primary-text-color, #e0e0e0);
         text-transform: uppercase;
         letter-spacing: 0.5px;
+        flex: 1;
+      }
+      .factor-chevron {
+        font-size: 10px;
+        color: var(--secondary-text-color, #aaa);
       }
       .factor-value {
         font-size: 13px;
@@ -342,6 +414,38 @@ class PaddleScoreCard extends HTMLElement {
         font-size: 11px;
         font-weight: 600;
         text-align: right;
+      }
+
+      .factor-forecast {
+        display: flex;
+        gap: 6px;
+        overflow-x: auto;
+        margin-top: 10px;
+        padding: 8px 0 4px;
+        border-top: 1px solid rgba(255,255,255,0.08);
+        scrollbar-width: thin;
+      }
+      .ff-item {
+        flex: 0 0 auto;
+        text-align: center;
+        min-width: 56px;
+        padding: 6px 4px;
+        background: rgba(255,255,255,0.05);
+        border-radius: 6px;
+        border: 1px solid transparent;
+      }
+      .ff-current {
+        border-color: #66BB6A;
+      }
+      .ff-time {
+        font-size: 10px;
+        color: var(--secondary-text-color, #aaa);
+        margin-bottom: 3px;
+      }
+      .ff-val {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--primary-text-color, #e0e0e0);
       }
 
       .forecast-section { padding: 12px; }
