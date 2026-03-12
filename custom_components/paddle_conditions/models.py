@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -67,3 +68,14 @@ class PaddleConditions:
     hourly_temp: list[float]
     hourly_uv: list[float]
     hourly_precip: list[int]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize to a JSON-compatible dict."""
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> PaddleConditions:
+        """Deserialize from a dict."""
+        data["score"] = PaddleScore(**data["score"])
+        data["forecast_blocks"] = [ForecastBlock(**b) for b in data["forecast_blocks"]]
+        return cls(**data)

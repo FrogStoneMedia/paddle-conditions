@@ -9,6 +9,7 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api.noaa import NOAAClient
@@ -66,6 +67,12 @@ class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):  # type: ignor
         self.noaa_station_id = subentry.data.get(CONF_NOAA_STATION_ID, "")
         self.optimal_cfs = subentry.data.get(CONF_OPTIMAL_CFS)
 
+        self._store: Store[dict] = Store(
+            hass,
+            version=1,
+            key=f"{DOMAIN}_{subentry_id}_cache",
+        )
+
         session = async_get_clientsession(hass)
         self.weather_client = OpenMeteoWeatherClient(session)
         self.aqi_client = OpenMeteoAQIClient(session)
@@ -77,12 +84,30 @@ class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):  # type: ignor
         sync_token = config_entry.options.get(CONF_CLOUD_SYNC_TOKEN, "")
         self.sync_client = CloudSyncClient(session, sync_url, sync_token)
 
+    async def async_config_entry_first_refresh(self) -> None:
+        """Load cached data before the first API refresh."""
+        cached = await self._store.async_load()
+        if cached is not None:
+            try:
+                self.data = PaddleConditions.from_dict(cached)
+                LOGGER.debug("Loaded cached data for %s", self.location_name)
+            except (KeyError, TypeError, ValueError):
+                LOGGER.warning("Corrupt cache for %s, ignoring", self.location_name)
+        await super().async_config_entry_first_refresh()
+
     async def _async_update_data(self) -> PaddleConditions:
         """Fetch data from all APIs and compute score."""
         # Launch all API calls in parallel for faster updates
         try:
             weather = await self.weather_client.fetch(self.latitude, self.longitude)
         except Exception as err:
+            if self.data is not None:
+                LOGGER.warning(
+                    "Weather API failed for %s, using cached data: %s",
+                    self.location_name,
+                    err,
+                )
+                return self.data
             raise UpdateFailed(f"Weather API failed: {err}") from err
 
         aqi = None
@@ -183,7 +208,7 @@ class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):  # type: ignor
                 )
             )
 
-        return PaddleConditions(
+        conditions = PaddleConditions(
             score=score,
             activity=activity,
             profile=profile_name,
@@ -206,6 +231,11 @@ class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):  # type: ignor
             hourly_uv=weather.hourly_uv,
             hourly_precip=weather.hourly_precip,
         )
+
+        # Persist to disk for fast restarts
+        self.hass.async_create_task(self._store.async_save(conditions.to_dict()))
+
+        return conditions
 
     def _build_forecast_blocks(self, weather: Any, weights: dict[str, float], profile: Any) -> list[ForecastBlock]:
         """Aggregate hourly data into 3-hour forecast blocks."""
