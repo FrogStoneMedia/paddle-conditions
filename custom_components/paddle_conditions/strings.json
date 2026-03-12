@@ -49,6 +49,30 @@
             "noaa_station_id": "For water temperature data. Find your station at tidesandcurrents.noaa.gov",
             "optimal_cfs": "Your preferred river flow in cubic feet per second. Only used for river locations."
           }
+        },
+        "reconfigure": {
+          "title": "Edit Paddle Location",
+          "description": "Update the details for this paddle spot.",
+          "data": {
+            "name": "Location name",
+            "latitude": "Latitude",
+            "longitude": "Longitude",
+            "water_body_type": "Water body type",
+            "display_order": "Display order",
+            "usgs_station_id": "USGS station ID",
+            "noaa_station_id": "NOAA station ID",
+            "optimal_cfs": "Optimal streamflow (CFS)"
+          },
+          "data_description": {
+            "name": "A friendly name for this spot, e.g. \"Lake Natoma\" or \"Deschutes River\"",
+            "latitude": "Decimal degrees, e.g. 38.6360. Tip: find coordinates on Google Maps by right-clicking a location.",
+            "longitude": "Decimal degrees, e.g. -121.1850",
+            "water_body_type": "Determines which data sources and scoring factors apply",
+            "display_order": "Lower numbers appear first when you have multiple locations (0 = default)",
+            "usgs_station_id": "For river streamflow data. Find your station at waterdata.usgs.gov",
+            "noaa_station_id": "For water temperature data. Find your station at tidesandcurrents.noaa.gov",
+            "optimal_cfs": "Your preferred river flow in cubic feet per second. Only used for river locations."
+          }
         }
       }
     }

@@ -86,7 +86,7 @@ class PaddleConfigFlow(ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg, mis
 
 
 class LocationSubentryFlow(ConfigSubentryFlow):  # type: ignore[misc]
-    """Handle adding a paddle location."""
+    """Handle adding and editing paddle locations."""
 
     _preset_defaults: dict[str, str | float] | None = None
 
@@ -117,6 +117,50 @@ class LocationSubentryFlow(ConfigSubentryFlow):  # type: ignore[misc]
             ),
         )
 
+    def _location_schema(self, defaults: dict[str, Any]) -> vol.Schema:
+        """Build the location form schema with given defaults."""
+        return vol.Schema(
+            {
+                vol.Required(CONF_NAME, default=defaults.get(CONF_NAME, "")): str,
+                vol.Required(CONF_LATITUDE, default=defaults.get(CONF_LATITUDE)): cv.latitude,
+                vol.Required(CONF_LONGITUDE, default=defaults.get(CONF_LONGITUDE)): cv.longitude,
+                vol.Required(
+                    CONF_WATER_BODY_TYPE,
+                    default=defaults.get(CONF_WATER_BODY_TYPE, WATER_BODY_LAKE),
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=[
+                            {"value": WATER_BODY_LAKE, "label": "Lake / Reservoir"},
+                            {"value": WATER_BODY_RIVER, "label": "River"},
+                            {"value": WATER_BODY_BAY_OCEAN, "label": "Bay / Ocean"},
+                        ],
+                        mode=SelectSelectorMode.DROPDOWN,
+                    )
+                ),
+                vol.Optional(CONF_DISPLAY_ORDER, default=int(defaults.get(CONF_DISPLAY_ORDER, 0))): int,
+                vol.Optional(
+                    CONF_USGS_STATION_ID,
+                    default=str(defaults.get(CONF_USGS_STATION_ID, "")),
+                ): str,
+                vol.Optional(
+                    CONF_NOAA_STATION_ID,
+                    default=str(defaults.get(CONF_NOAA_STATION_ID, "")),
+                ): str,
+                vol.Optional(
+                    CONF_OPTIMAL_CFS,
+                    **({"default": defaults[CONF_OPTIMAL_CFS]} if defaults.get(CONF_OPTIMAL_CFS) is not None else {}),
+                ): NumberSelector(
+                    NumberSelectorConfig(
+                        min=0,
+                        max=50000,
+                        step=50,
+                        unit_of_measurement="CFS",
+                        mode=NumberSelectorMode.BOX,
+                    )
+                ),
+            }
+        )
+
     async def async_step_location(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:
         """Handle location details."""
         if user_input is not None:
@@ -127,48 +171,24 @@ class LocationSubentryFlow(ConfigSubentryFlow):  # type: ignore[misc]
             return self.async_create_entry(title=user_input[CONF_NAME], data=user_input)
 
         defaults = self._preset_defaults or {}
+        return self.async_show_form(step_id="location", data_schema=self._location_schema(defaults))
 
-        return self.async_show_form(
-            step_id="location",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_NAME, default=defaults.get(CONF_NAME, "")): str,
-                    vol.Required(CONF_LATITUDE, default=defaults.get(CONF_LATITUDE)): cv.latitude,
-                    vol.Required(CONF_LONGITUDE, default=defaults.get(CONF_LONGITUDE)): cv.longitude,
-                    vol.Required(
-                        CONF_WATER_BODY_TYPE,
-                        default=defaults.get(CONF_WATER_BODY_TYPE, WATER_BODY_LAKE),
-                    ): SelectSelector(
-                        SelectSelectorConfig(
-                            options=[
-                                {"value": WATER_BODY_LAKE, "label": "Lake / Reservoir"},
-                                {"value": WATER_BODY_RIVER, "label": "River"},
-                                {"value": WATER_BODY_BAY_OCEAN, "label": "Bay / Ocean"},
-                            ],
-                            mode=SelectSelectorMode.DROPDOWN,
-                        )
-                    ),
-                    vol.Optional(CONF_DISPLAY_ORDER, default=int(defaults.get(CONF_DISPLAY_ORDER, 0))): int,
-                    vol.Optional(
-                        CONF_USGS_STATION_ID,
-                        default=str(defaults.get(CONF_USGS_STATION_ID, "")),
-                    ): str,
-                    vol.Optional(
-                        CONF_NOAA_STATION_ID,
-                        default=str(defaults.get(CONF_NOAA_STATION_ID, "")),
-                    ): str,
-                    vol.Optional(CONF_OPTIMAL_CFS): NumberSelector(
-                        NumberSelectorConfig(
-                            min=0,
-                            max=50000,
-                            step=50,
-                            unit_of_measurement="CFS",
-                            mode=NumberSelectorMode.BOX,
-                        )
-                    ),
-                }
-            ),
-        )
+    async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:
+        """Handle editing an existing location."""
+        if user_input is not None:
+            user_input.setdefault(CONF_USGS_STATION_ID, "")
+            user_input.setdefault(CONF_NOAA_STATION_ID, "")
+            user_input.setdefault(CONF_DISPLAY_ORDER, 0)
+            user_input.setdefault(CONF_OPTIMAL_CFS, None)
+            return self.async_update_reload_and_abort(
+                self._get_entry(),
+                self._get_reconfigure_subentry(),
+                title=user_input[CONF_NAME],
+                data=user_input,
+            )
+
+        current = self._get_reconfigure_subentry().data
+        return self.async_show_form(step_id="reconfigure", data_schema=self._location_schema(current))
 
 
 class PaddleOptionsFlow(OptionsFlow):  # type: ignore[misc]
