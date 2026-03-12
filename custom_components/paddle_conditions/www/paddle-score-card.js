@@ -696,17 +696,18 @@ class PaddleScoreCard extends HTMLElement {
 
     const content = this._el("div", { className: "overlay-content" });
 
+    // Top bar with name and close button
+    const topBar = this._el("div", { className: "ov-topbar" });
+    topBar.appendChild(this._el("div", { className: "ov-name", textContent: name }));
     const closeBtn = this._el("div", { className: "ov-close", textContent: "\u2715" });
     closeBtn.addEventListener("click", () => this._closeOverlay());
-    content.appendChild(closeBtn);
+    topBar.appendChild(closeBtn);
+    content.appendChild(topBar);
 
+    // Centered score header
     const header = this._el("div", { className: "ov-header" });
-    const left = this._el("div");
-    left.appendChild(this._el("div", { className: "ov-name", textContent: name }));
-    left.appendChild(this._el("div", { className: "ov-date", style: { color: this._scoreColor(score) }, textContent: this._dayLabel(new Date()) }));
-    header.appendChild(left);
-    const right = this._el("div", { style: { textAlign: "right" } });
-    right.appendChild(this._el("div", { className: "ov-score", style: { color: this._scoreColor(score) }, textContent: isNaN(score) ? "\u2014" : String(score) }));
+    header.appendChild(this._el("div", { className: "ov-date", style: { color: this._scoreColor(score) }, textContent: this._dayLabel(new Date()) }));
+    header.appendChild(this._el("div", { className: "ov-score", style: { color: this._scoreColor(score) }, textContent: isNaN(score) ? "\u2014" : String(score) }));
 
     const safeBlocks = blocks.length ? this._filterDaylightBlocks(blocks) : [];
     const bestBlock = safeBlocks.length ? safeBlocks.reduce((a, b) => b.score > a.score ? b : a, safeBlocks[0]) : null;
@@ -717,8 +718,7 @@ class PaddleScoreCard extends HTMLElement {
       const inBlock = now >= t && now < new Date(bestBlock.end);
       bestText += inBlock ? " \u2014 Best now" : ` \u2014 Best at ${t.toLocaleTimeString([], { hour: "numeric" })}`;
     }
-    right.appendChild(this._el("div", { className: "ov-best", style: { color: this._scoreColor(score) }, textContent: bestText }));
-    header.appendChild(right);
+    header.appendChild(this._el("div", { className: "ov-best", style: { color: this._scoreColor(score) }, textContent: bestText }));
     content.appendChild(header);
 
     const data = this._getOverlayHourlyData();
@@ -1121,20 +1121,24 @@ class PaddleScoreCard extends HTMLElement {
         transition: transform 0.3s ease;
       }
       .overlay-visible .overlay-content { transform: translateY(0); }
-      .ov-close {
-        position: absolute;
-        top: 12px; right: 16px;
-        font-size: 20px;
-        color: #888;
-        cursor: pointer;
-        z-index: 1;
-        padding: 4px 8px;
-      }
-      .ov-close:hover { color: #fff; }
-      .ov-header {
+      .ov-topbar {
         display: flex;
         justify-content: space-between;
         align-items: center;
+        margin-bottom: 8px;
+      }
+      .ov-close {
+        font-size: 18px;
+        color: #aaa;
+        cursor: pointer;
+        padding: 6px 10px;
+        border-radius: 6px;
+        background: rgba(255,255,255,0.08);
+        line-height: 1;
+      }
+      .ov-close:hover { color: #fff; background: rgba(255,255,255,0.15); }
+      .ov-header {
+        text-align: center;
         margin-bottom: 16px;
       }
       .ov-name {
@@ -1145,16 +1149,16 @@ class PaddleScoreCard extends HTMLElement {
       }
       .ov-date {
         font-size: 13px;
-        margin-top: 2px;
+        margin-bottom: 2px;
       }
       .ov-score {
-        font-size: 40px;
+        font-size: 48px;
         font-weight: bold;
         line-height: 1;
       }
       .ov-best {
         font-size: 12px;
-        margin-top: 2px;
+        margin-top: 4px;
       }
       .ov-chart {
         background: #2a2a3e;
