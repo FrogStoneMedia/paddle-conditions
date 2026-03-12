@@ -108,7 +108,6 @@ class PaddleScoreCard extends HTMLElement {
     const score = parseInt(scoreEntity.state, 10);
     const attrs = scoreEntity.attributes || {};
     const rating = attrs.rating || "\u2014";
-    const limitingFactor = attrs.limiting_factor;
     const factors = attrs.factors || {};
     const name = (attrs.friendly_name || "").replace(/ Paddle Score$/i, "");
 
@@ -119,7 +118,7 @@ class PaddleScoreCard extends HTMLElement {
     this.shadowRoot.appendChild(this._styleEl());
 
     const card = this._el("ha-card");
-    card.appendChild(this._buildHero(name, score, rating, limitingFactor, factors));
+    card.appendChild(this._buildHero(name, score, rating, blocks));
     card.appendChild(this._buildFactorGrid(factors, blocks));
     const forecast = this._buildForecast(blocks);
     if (forecast) card.appendChild(forecast);
@@ -127,17 +126,27 @@ class PaddleScoreCard extends HTMLElement {
     this.shadowRoot.appendChild(card);
   }
 
-  _buildHero(name, score, rating, limitingFactor, factors) {
+  _buildHero(name, score, rating, blocks) {
     const hero = this._el("div", { className: "hero", style: { background: this._ratingGradient(rating) } });
     hero.appendChild(this._el("div", { className: "hero-name", textContent: name }));
     hero.appendChild(this._el("div", { className: "hero-score", textContent: isNaN(score) ? "\u2014" : String(score) }));
     hero.appendChild(this._el("div", { className: "hero-rating", textContent: this._ratingLabel(rating) }));
 
-    if (limitingFactor) {
-      const limitLabel = limitingFactor.replace(/_/g, " ");
-      const limitScore = factors[limitingFactor];
-      const text = `Limiting: ${limitLabel}${limitScore != null ? ` (${limitScore})` : ""}`;
-      hero.appendChild(this._el("div", { className: "hero-limit", textContent: text }));
+    if (blocks.length > 0) {
+      const best = blocks.reduce((a, b) => b.score > a.score ? b : a, blocks[0]);
+      const now = new Date();
+      const bestStart = new Date(best.start);
+      const bestEnd = new Date(best.end);
+      const isCurrent = now >= bestStart && now < bestEnd;
+
+      let text;
+      if (isCurrent) {
+        text = `Best time: Now (${best.score})`;
+      } else {
+        const timeStr = bestStart.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+        text = `Best time: ${timeStr} (${best.score})`;
+      }
+      hero.appendChild(this._el("div", { className: "hero-best", textContent: text }));
     }
     return hero;
   }
@@ -342,10 +351,10 @@ class PaddleScoreCard extends HTMLElement {
         letter-spacing: 2px;
         margin-bottom: 4px;
       }
-      .hero-limit {
-        font-size: 12px;
-        opacity: 0.8;
-        text-transform: capitalize;
+      .hero-best {
+        font-size: 13px;
+        opacity: 0.9;
+        margin-top: 2px;
       }
 
       .factor-grid {
@@ -354,7 +363,16 @@ class PaddleScoreCard extends HTMLElement {
         gap: 8px;
         padding: 12px;
       }
-      @media (max-width: 350px) {
+      @media (max-width: 400px) {
+        .factor-grid { gap: 6px; padding: 8px; }
+        .factor-tile { padding: 8px; }
+        .factor-label { font-size: 11px; }
+        .factor-value { font-size: 12px; }
+        .hero-score { font-size: 48px; }
+        .hero-name { font-size: 12px; }
+        .hero-rating { font-size: 16px; }
+      }
+      @media (max-width: 300px) {
         .factor-grid { grid-template-columns: 1fr; }
       }
       .factor-tile {
