@@ -99,11 +99,20 @@ class PaddleScoreCard extends HTMLElement {
     const isUp = sun.state === "above_horizon";
     let sunrise, sunset;
     if (isUp) {
+      // Sun is up: next_setting = today's sunset, next_rising = tomorrow's sunrise
       sunset = setting;
       sunrise = new Date(rising.getTime() - 24 * 60 * 60 * 1000);
     } else {
-      sunrise = rising;
-      sunset = setting;
+      // Sun is down: next_rising = tomorrow's sunrise, next_setting = tomorrow's sunset
+      // For displaying today's remaining data, use approximate today values
+      sunrise = new Date(rising.getTime() - 24 * 60 * 60 * 1000);
+      sunset = new Date(setting.getTime() - 24 * 60 * 60 * 1000);
+      // Also provide tomorrow's window
+      if (sunset < new Date()) {
+        // Past today's sunset entirely — use tomorrow
+        sunrise = rising;
+        sunset = setting;
+      }
     }
     return { sunrise, sunset };
   }
@@ -201,13 +210,30 @@ class PaddleScoreCard extends HTMLElement {
     return hero;
   }
 
+  _getHourlyData() {
+    const forecastEntity = this._entity("3_hour_forecast");
+    if (!forecastEntity) return null;
+    const attrs = forecastEntity.attributes || {};
+    const times = attrs.hourly_times;
+    if (!times || !times.length) return null;
+    return {
+      times,
+      wind: attrs.hourly_wind || [],
+      temp: attrs.hourly_temp || [],
+      uv: attrs.hourly_uv || [],
+      precip: attrs.hourly_precip || [],
+    };
+  }
+
   _buildFactorGrid(factors, blocks) {
-    // Maps factor keys to forecast block fields for daily drill-down
-    const blockFieldMap = {
-      wind_speed: { field: "wind_mph", unit: "mph", label: "Wind" },
-      temperature: { field: "temp_f", unit: "\u00B0F", label: "Temp" },
-      uv_index: { field: "uv", unit: "", label: "UV" },
-      precipitation: { field: "precip_pct", unit: "%", label: "Precip" },
+    const hourly = this._getHourlyData();
+
+    // Maps factor keys to hourly data arrays for drill-down
+    const hourlyFieldMap = {
+      wind_speed: { arr: hourly?.wind, unit: "mph", label: "Wind" },
+      temperature: { arr: hourly?.temp, unit: "\u00B0F", label: "Temp" },
+      uv_index: { arr: hourly?.uv, unit: "", label: "UV" },
+      precipitation: { arr: hourly?.precip, unit: "%", label: "Precip" },
     };
 
     const meta = [
@@ -244,7 +270,8 @@ class PaddleScoreCard extends HTMLElement {
       }
 
       const isExpanded = this._expandedFactor === f.key;
-      const hasForecast = blockFieldMap[f.key] && blocks.length > 0;
+      const hfm = hourlyFieldMap[f.key];
+      const hasForecast = hfm && hfm.arr && hfm.arr.length > 0;
 
       const tile = this._el("div", {
         className: `factor-tile${isExpanded ? " factor-expanded" : ""}${hasForecast ? " factor-clickable" : ""}`,
@@ -266,11 +293,9 @@ class PaddleScoreCard extends HTMLElement {
 
       tile.appendChild(this._el("div", { className: "factor-score", style: { color: this._scoreColor(subScore) }, textContent: `${subScore}/100` }));
 
-      // Forecast drill-down when expanded
+      // Hourly drill-down when expanded
       if (isExpanded && hasForecast) {
-        const bfm = blockFieldMap[f.key];
-        const displayBlocks = this._filterDisplayBlocks(blocks);
-        tile.appendChild(this._buildFactorForecast(displayBlocks, bfm));
+        tile.appendChild(this._buildHourlyForecast(hourly.times, hfm));
       }
 
       if (hasForecast) {
@@ -285,21 +310,27 @@ class PaddleScoreCard extends HTMLElement {
     return grid;
   }
 
-  _buildFactorForecast(blocks, bfm) {
+  _buildHourlyForecast(times, hfm) {
     const container = this._el("div", { className: "factor-forecast" });
     const now = new Date();
+    const win = this._getSunWindow();
 
-    for (const b of blocks) {
-      const start = new Date(b.start);
-      const end = new Date(b.end);
-      const isCurrent = now >= start && now < end;
-      const val = b[bfm.field];
+    // Filter to sunrise-1h through sunset+1h
+    const from = win ? new Date(win.sunrise.getTime() - 60 * 60 * 1000) : null;
+    const to = win ? new Date(win.sunset.getTime() + 60 * 60 * 1000) : null;
+
+    for (let i = 0; i < times.length && i < hfm.arr.length; i++) {
+      const t = new Date(times[i]);
+      if (from && (t < from || t > to)) continue;
+
+      const val = hfm.arr[i];
       if (val == null) continue;
 
-      const displayVal = bfm.unit === "\u00B0F" ? `${Math.round(val)}${bfm.unit}` :
-                         bfm.unit ? `${Math.round(val)} ${bfm.unit}` :
+      const isCurrent = now >= t && now < new Date(t.getTime() + 60 * 60 * 1000);
+      const displayVal = hfm.unit === "\u00B0F" ? `${Math.round(val)}${hfm.unit}` :
+                         hfm.unit ? `${Math.round(val)} ${hfm.unit}` :
                          String(Math.round(val * 10) / 10);
-      const timeLabel = start.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+      const timeLabel = t.toLocaleTimeString([], { hour: "numeric" });
 
       const item = this._el("div", { className: `ff-item${isCurrent ? " ff-current" : ""}` });
       item.appendChild(this._el("div", { className: "ff-time", textContent: timeLabel }));

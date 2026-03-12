@@ -151,6 +151,11 @@ SENSOR_DESCRIPTIONS: tuple[PaddleSensorEntityDescription, ...] = (
             ],
             "best_block": max(data.forecast_blocks, key=lambda b: b.score).start if data.forecast_blocks else None,
             "best_score": max(b.score for b in data.forecast_blocks) if data.forecast_blocks else None,
+            "hourly_times": data.hourly_times,
+            "hourly_wind": data.hourly_wind,
+            "hourly_temp": data.hourly_temp,
+            "hourly_uv": data.hourly_uv,
+            "hourly_precip": data.hourly_precip,
         },
     ),
 )

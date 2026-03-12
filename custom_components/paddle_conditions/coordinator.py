@@ -200,6 +200,11 @@ class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):  # type: ignor
             tide_factor=tide_current,
             condition_text=weather.condition_text,
             forecast_blocks=forecast_blocks,
+            hourly_times=weather.hourly_times,
+            hourly_wind=weather.hourly_wind,
+            hourly_temp=weather.hourly_temp,
+            hourly_uv=weather.hourly_uv,
+            hourly_precip=weather.hourly_precip,
         )
 
     def _build_forecast_blocks(self, weather: Any, weights: dict[str, float], profile: Any) -> list[ForecastBlock]:

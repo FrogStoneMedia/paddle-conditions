@@ -62,3 +62,8 @@ class PaddleConditions:
     tide_factor: float | None
     condition_text: str | None
     forecast_blocks: list[ForecastBlock]
+    hourly_times: list[str]
+    hourly_wind: list[float]
+    hourly_temp: list[float]
+    hourly_uv: list[float]
+    hourly_precip: list[int]
