@@ -6,6 +6,8 @@ class PaddleScoreCard extends HTMLElement {
     this._config = null;
     this._expandedBlock = null;
     this._expandedFactor = null;
+    this._overlayOpen = false;
+    this._boundEscHandler = (e) => { if (e.key === "Escape") this._closeOverlay(); };
   }
 
   setConfig(config) {
@@ -180,6 +182,10 @@ class PaddleScoreCard extends HTMLElement {
     if (forecast) card.appendChild(forecast);
 
     this.shadowRoot.appendChild(card);
+
+    if (this._overlayOpen) {
+      this.shadowRoot.appendChild(this._buildOverlay(name, score, rating, blocks));
+    }
   }
 
   _dayLabel(date) {
@@ -200,6 +206,9 @@ class PaddleScoreCard extends HTMLElement {
     hero.appendChild(this._el("div", { className: "hero-date", textContent: dateStr }));
     hero.appendChild(this._el("div", { className: "hero-score", textContent: isNaN(score) ? "\u2014" : String(score) }));
     hero.appendChild(this._el("div", { className: "hero-rating", textContent: this._ratingLabel(rating) }));
+
+    hero.style.cursor = "pointer";
+    hero.addEventListener("click", () => this._openOverlay());
 
     if (blocks.length > 0) {
       const safeBlocks = this._filterDaylightBlocks(blocks);
@@ -426,6 +435,430 @@ class PaddleScoreCard extends HTMLElement {
     }
 
     return section;
+  }
+
+  // ── Overlay ───────────────────────────────────────────────
+
+  _openOverlay() {
+    this._overlayOpen = true;
+    document.addEventListener("keydown", this._boundEscHandler);
+    this._render();
+    requestAnimationFrame(() => {
+      const el = this.shadowRoot.querySelector(".overlay");
+      if (el) el.classList.add("overlay-visible");
+    });
+  }
+
+  _closeOverlay() {
+    const el = this.shadowRoot.querySelector(".overlay");
+    if (el) {
+      el.classList.remove("overlay-visible");
+      el.addEventListener("transitionend", () => {
+        this._overlayOpen = false;
+        document.removeEventListener("keydown", this._boundEscHandler);
+        this._render();
+      }, { once: true });
+    } else {
+      this._overlayOpen = false;
+      document.removeEventListener("keydown", this._boundEscHandler);
+    }
+  }
+
+  _svgEl(tag, attrs) {
+    const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+    if (attrs) for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+    return el;
+  }
+
+  _getOverlayHourlyData() {
+    const hourly = this._getHourlyData();
+    if (!hourly) return null;
+
+    const win = this._getSunWindow();
+    const from = win ? new Date(win.sunrise.getTime() - 60 * 60 * 1000) : null;
+    const to = win ? new Date(win.sunset.getTime() + 60 * 60 * 1000) : null;
+
+    const indices = [];
+    for (let i = 0; i < hourly.times.length; i++) {
+      const t = new Date(hourly.times[i]);
+      if (from && (t < from || t > to)) continue;
+      indices.push(i);
+    }
+    if (indices.length < 2) return null;
+
+    return {
+      indices,
+      times: indices.map(i => new Date(hourly.times[i])),
+      wind: indices.map(i => hourly.wind[i] ?? 0),
+      temp: indices.map(i => hourly.temp[i] ?? 0),
+      uv: indices.map(i => hourly.uv[i] ?? 0),
+      precip: indices.map(i => hourly.precip[i] ?? 0),
+      sunrise: win?.sunrise,
+      sunset: win?.sunset,
+    };
+  }
+
+  _getHourlyScores(blocks, times) {
+    if (!blocks.length || !times.length) return times.map(() => null);
+    return times.map(t => {
+      for (const b of blocks) {
+        const bs = new Date(b.start);
+        const be = new Date(b.end);
+        if (t >= bs && t < be) return b.score;
+      }
+      return null;
+    });
+  }
+
+  _buildOverlayChartSvg({ values, values2, color, color2, dash2, fillColor, yMin, yMax, times, zones }) {
+    const W = 200, H = 70;
+    const svg = this._svgEl("svg", { width: "100%", height: String(H), viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: "none" });
+    svg.style.cssText = "position:absolute;top:0;left:0";
+
+    if (zones) {
+      for (const z of zones) {
+        const y1 = H - ((z.from - yMin) / (yMax - yMin)) * H;
+        const y2 = H - ((z.to - yMin) / (yMax - yMin)) * H;
+        svg.appendChild(this._svgEl("rect", { x: "0", y: String(Math.min(y1, y2)), width: String(W), height: String(Math.abs(y2 - y1)), fill: z.color }));
+      }
+    }
+
+    const toPoints = (vals) => {
+      return vals.map((v, i) => {
+        if (v == null) return null;
+        const x = (i / (vals.length - 1)) * W;
+        const y = H - ((v - yMin) / (yMax - yMin)) * H;
+        return `${x.toFixed(1)},${Math.max(0, Math.min(H, y)).toFixed(1)}`;
+      }).filter(Boolean).join(" ");
+    };
+
+    if (fillColor && values.length > 1) {
+      const pts = values.map((v, i) => {
+        if (v == null) return null;
+        const x = (i / (values.length - 1)) * W;
+        const y = H - ((v - yMin) / (yMax - yMin)) * H;
+        return { x: x.toFixed(1), y: Math.max(0, Math.min(H, y)).toFixed(1) };
+      }).filter(Boolean);
+      if (pts.length > 1) {
+        const d = `M${pts[0].x},${pts[0].y} ${pts.slice(1).map(p => `L${p.x},${p.y}`).join(" ")} L${pts[pts.length - 1].x},${H} L${pts[0].x},${H} Z`;
+        svg.appendChild(this._svgEl("path", { d, fill: fillColor }));
+      }
+    }
+
+    const pts1 = toPoints(values);
+    if (pts1) {
+      svg.appendChild(this._svgEl("polyline", {
+        points: pts1, fill: "none", stroke: color, "stroke-width": "2",
+        "stroke-linecap": "round", "stroke-linejoin": "round",
+      }));
+    }
+
+    if (values2) {
+      const pts2 = toPoints(values2);
+      if (pts2) {
+        const attrs = {
+          points: pts2, fill: "none", stroke: color2, "stroke-width": "1.5",
+          "stroke-linecap": "round", "stroke-linejoin": "round",
+        };
+        if (dash2) attrs["stroke-dasharray"] = dash2;
+        svg.appendChild(this._svgEl("polyline", attrs));
+      }
+    }
+
+    const now = new Date();
+    if (times.length > 1 && now >= times[0] && now <= times[times.length - 1]) {
+      const span = times[times.length - 1] - times[0];
+      const nx = ((now - times[0]) / span) * W;
+      svg.appendChild(this._svgEl("line", {
+        x1: nx.toFixed(1), y1: "0", x2: nx.toFixed(1), y2: String(H),
+        stroke: "rgba(255,255,255,0.4)", "stroke-width": "1.5",
+      }));
+    }
+
+    return svg;
+  }
+
+  _summaryEl(template) {
+    const el = this._el("div", { className: "ov-summary" });
+    const parts = template.split(/(<strong>.*?<\/strong>)/);
+    for (const part of parts) {
+      const m = part.match(/^<strong>(.*)<\/strong>$/);
+      if (m) {
+        el.appendChild(this._el("strong", { textContent: m[1] }));
+      } else {
+        el.appendChild(document.createTextNode(part));
+      }
+    }
+    return el;
+  }
+
+  _buildOverlayChartCard({ title, unitLabel, legend, yLabels, values, values2, color, color2, dash2, fillColor, yMin, yMax, times, zones, summary, sunTimes, windArrows }) {
+    const card = this._el("div", { className: "ov-chart" });
+    const header = this._el("div", { className: "ov-chart-header" });
+    header.appendChild(this._el("div", { className: "ov-chart-title", textContent: title }));
+
+    if (legend) {
+      const leg = this._el("div", { className: "ov-chart-legend" });
+      for (const l of legend) {
+        leg.appendChild(this._el("span", { style: { color: l.color }, textContent: l.text }));
+      }
+      header.appendChild(leg);
+    } else if (unitLabel) {
+      header.appendChild(this._el("div", { className: "ov-chart-unit", textContent: unitLabel }));
+    }
+    card.appendChild(header);
+
+    const marginLeft = Math.max(...yLabels.map(l => l.text.length)) * 7 + 6;
+    const area = this._el("div", { className: "ov-chart-area", style: { marginLeft: `${marginLeft}px` } });
+
+    for (const l of yLabels) {
+      const pct = ((l.value - yMin) / (yMax - yMin)) * 100;
+      const topPct = 100 - pct;
+      area.appendChild(this._el("div", {
+        className: "ov-ylabel",
+        style: { top: `${topPct}%`, left: `-${marginLeft}px` },
+        textContent: l.text,
+      }));
+    }
+
+    area.appendChild(this._el("div", { className: "ov-gridline", style: { top: "0" } }));
+    area.appendChild(this._el("div", { className: "ov-gridline ov-gridline-dash", style: { top: "50%" } }));
+    area.appendChild(this._el("div", { className: "ov-gridline", style: { bottom: "0" } }));
+
+    const now = new Date();
+    if (times.length > 1 && now >= times[0] && now <= times[times.length - 1]) {
+      const span = times[times.length - 1] - times[0];
+      const pct = ((now - times[0]) / span) * 100;
+      area.appendChild(this._el("div", { className: "ov-now-label", style: { left: `${pct}%` }, textContent: "now" }));
+    }
+
+    if (zones) {
+      for (const z of zones) {
+        if (!z.label) continue;
+        const pct = 100 - ((z.to - yMin) / (yMax - yMin)) * 100;
+        area.appendChild(this._el("div", {
+          className: "ov-zone-label",
+          style: { top: `${Math.max(2, pct + 2)}%`, color: z.labelColor || "#666" },
+          textContent: z.label,
+        }));
+      }
+    }
+
+    area.appendChild(this._buildOverlayChartSvg({ values, values2, color, color2, dash2, fillColor, yMin, yMax, times, zones }));
+    card.appendChild(area);
+
+    const timeAxis = this._el("div", { className: "ov-time-axis", style: { marginLeft: `${marginLeft}px` } });
+    const step = Math.max(1, Math.floor(times.length / 5));
+    for (let i = 0; i < times.length; i += step) {
+      timeAxis.appendChild(this._el("span", { textContent: times[i].toLocaleTimeString([], { hour: "numeric" }) }));
+    }
+    if (times.length % step !== 1) {
+      timeAxis.appendChild(this._el("span", { textContent: times[times.length - 1].toLocaleTimeString([], { hour: "numeric" }) }));
+    }
+    card.appendChild(timeAxis);
+
+    if (sunTimes) {
+      const sunRow = this._el("div", { className: "ov-sun-row", style: { marginLeft: `${marginLeft}px` } });
+      const fmtTime = (d) => d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+      sunRow.appendChild(this._el("span", { style: { color: "#FFA726" }, textContent: `\u2600\uFE0E ${fmtTime(sunTimes.sunrise)}` }));
+      sunRow.appendChild(this._el("span", {}));
+      sunRow.appendChild(this._el("span", { style: { color: "#FF7043" }, textContent: `\u263E ${fmtTime(sunTimes.sunset)}` }));
+      card.appendChild(sunRow);
+    }
+
+    if (windArrows && windArrows.length) {
+      const arrowRow = this._el("div", { className: "ov-arrow-row", style: { marginLeft: `${marginLeft}px` } });
+      const arrowStep = Math.max(1, Math.floor(windArrows.length / 8));
+      for (let i = 0; i < windArrows.length; i += arrowStep) {
+        arrowRow.appendChild(this._el("span", { textContent: windArrows[i] }));
+      }
+      card.appendChild(arrowRow);
+    }
+
+    if (summary) {
+      card.appendChild(this._summaryEl(summary));
+    }
+
+    return card;
+  }
+
+  _windDirArrow(deg) {
+    if (deg == null) return "";
+    const arrows = ["\u2191", "\u2197", "\u2192", "\u2198", "\u2193", "\u2199", "\u2190", "\u2196"];
+    return arrows[Math.round(((deg + 180) % 360) / 45) % 8];
+  }
+
+  _buildOverlay(name, score, rating, blocks) {
+    const overlay = this._el("div", { className: "overlay" });
+    const backdrop = this._el("div", { className: "overlay-backdrop" });
+    backdrop.addEventListener("click", () => this._closeOverlay());
+    overlay.appendChild(backdrop);
+
+    const content = this._el("div", { className: "overlay-content" });
+
+    const closeBtn = this._el("div", { className: "ov-close", textContent: "\u2715" });
+    closeBtn.addEventListener("click", () => this._closeOverlay());
+    content.appendChild(closeBtn);
+
+    const header = this._el("div", { className: "ov-header" });
+    const left = this._el("div");
+    left.appendChild(this._el("div", { className: "ov-name", textContent: name }));
+    left.appendChild(this._el("div", { className: "ov-date", style: { color: this._scoreColor(score) }, textContent: this._dayLabel(new Date()) }));
+    header.appendChild(left);
+    const right = this._el("div", { style: { textAlign: "right" } });
+    right.appendChild(this._el("div", { className: "ov-score", style: { color: this._scoreColor(score) }, textContent: isNaN(score) ? "\u2014" : String(score) }));
+
+    const safeBlocks = blocks.length ? this._filterDaylightBlocks(blocks) : [];
+    const bestBlock = safeBlocks.length ? safeBlocks.reduce((a, b) => b.score > a.score ? b : a, safeBlocks[0]) : null;
+    let bestText = this._ratingLabel(rating);
+    if (bestBlock) {
+      const t = new Date(bestBlock.start);
+      const now = new Date();
+      const inBlock = now >= t && now < new Date(bestBlock.end);
+      bestText += inBlock ? " \u2014 Best now" : ` \u2014 Best at ${t.toLocaleTimeString([], { hour: "numeric" })}`;
+    }
+    right.appendChild(this._el("div", { className: "ov-best", style: { color: this._scoreColor(score) }, textContent: bestText }));
+    header.appendChild(right);
+    content.appendChild(header);
+
+    const data = this._getOverlayHourlyData();
+    if (data) {
+      const { times, wind, temp, uv, precip, sunrise, sunset } = data;
+      const scores = this._getHourlyScores(blocks, times);
+
+      const validScores = scores.filter(s => s != null);
+      if (validScores.length > 0) {
+        content.appendChild(this._buildOverlayChartCard({
+          title: "PADDLE SCORE", unitLabel: "0\u2013100",
+          yLabels: [{ value: 0, text: "0" }, { value: 50, text: "50" }, { value: 100, text: "100" }],
+          values: scores, color: "#4CAF50",
+          fillColor: "rgba(76,175,80,0.15)",
+          yMin: 0, yMax: 100, times,
+          zones: [
+            { from: 70, to: 100, color: "rgba(76,175,80,0.04)", label: "GO", labelColor: "rgba(76,175,80,0.5)" },
+            { from: 40, to: 70, color: "rgba(255,193,7,0.03)", label: "CAUTION", labelColor: "rgba(255,193,7,0.4)" },
+            { from: 0, to: 40, color: "rgba(244,67,54,0.03)", label: "NO GO", labelColor: "rgba(244,67,54,0.4)" },
+          ],
+          sunTimes: sunrise && sunset ? { sunrise, sunset } : null,
+        }));
+      }
+
+      const windMax = Math.max(25, ...wind) + 5;
+      const gustEntity = this._entity("wind_gusts");
+      const dirEntity = this._entity("wind_direction");
+      const currentWind = this._entity("wind_speed");
+      let windSummary = "";
+      if (currentWind) {
+        windSummary = `Now: <strong>${currentWind.state} mph</strong>`;
+        if (gustEntity?.state) windSummary += ` gusting <strong>${gustEntity.state} mph</strong>`;
+        if (dirEntity?.state) windSummary += ` \u00B7 ${this._degToCompass(parseFloat(dirEntity.state))}`;
+      }
+      const windArrows = times.map(() => "");
+      if (dirEntity?.state) {
+        const deg = parseFloat(dirEntity.state);
+        for (let i = 0; i < windArrows.length; i++) windArrows[i] = this._windDirArrow(deg);
+      }
+
+      content.appendChild(this._buildOverlayChartCard({
+        title: "WIND",
+        legend: [{ color: "#2196F3", text: "\u2014 Speed" }, { color: "#FF9800", text: "\u2504 Gusts" }],
+        yLabels: [
+          { value: 0, text: "0" },
+          { value: Math.round(windMax / 2), text: `${Math.round(windMax / 2)} mph` },
+          { value: windMax, text: `${windMax} mph` },
+        ],
+        values: wind, color: "#2196F3",
+        values2: wind.map(w => w * 1.4), color2: "#FF9800", dash2: "6,4",
+        yMin: 0, yMax: windMax, times,
+        summary: windSummary,
+        windArrows,
+      }));
+
+      const allTemps = [...temp];
+      const waterEntity = this._entity("water_temperature");
+      const waterVal = waterEntity?.state !== "unavailable" ? parseFloat(waterEntity?.state) : null;
+      const waterLine = waterVal != null && !isNaN(waterVal) ? times.map(() => waterVal) : null;
+      if (waterVal != null && !isNaN(waterVal)) allTemps.push(waterVal);
+      const tMin = Math.floor((Math.min(...allTemps) - 5) / 5) * 5;
+      const tMax = Math.ceil((Math.max(...allTemps) + 5) / 5) * 5;
+      let tempSummary = "";
+      const airEntity = this._entity("air_temperature");
+      if (airEntity) {
+        tempSummary = `Air: <strong>${airEntity.state}\u00B0F</strong>`;
+        if (waterVal != null && !isNaN(waterVal)) tempSummary += ` \u00B7 Water: <strong>${waterVal}\u00B0F</strong>`;
+      }
+
+      content.appendChild(this._buildOverlayChartCard({
+        title: "TEMPERATURE",
+        legend: [{ color: "#FF5722", text: "\u2014 Air" }, ...(waterLine ? [{ color: "#00BCD4", text: "\u2504 Water" }] : [])],
+        yLabels: [
+          { value: tMin, text: `${tMin}\u00B0F` },
+          { value: Math.round((tMin + tMax) / 2), text: `${Math.round((tMin + tMax) / 2)}\u00B0F` },
+          { value: tMax, text: `${tMax}\u00B0F` },
+        ],
+        values: temp, color: "#FF5722", fillColor: "rgba(255,87,34,0.1)",
+        values2: waterLine, color2: "#00BCD4", dash2: "6,4",
+        yMin: tMin, yMax: tMax, times,
+        summary: tempSummary,
+      }));
+
+      const uvMax = Math.max(11, ...uv);
+      const uvEntity = this._entity("uv_index");
+      const peakUV = Math.max(...uv);
+      const peakIdx = uv.indexOf(peakUV);
+      const peakTime = times[peakIdx]?.toLocaleTimeString([], { hour: "numeric" });
+      let uvSummary = "";
+      if (uvEntity) {
+        const val = parseFloat(uvEntity.state);
+        const label = val >= 11 ? "Extreme" : val >= 8 ? "Very High" : val >= 6 ? "High" : val >= 3 ? "Moderate" : "Low";
+        uvSummary = `Now: <strong>${uvEntity.state}</strong> (${label})`;
+        if (peakTime) uvSummary += ` \u00B7 Peak: <strong>${peakUV.toFixed(1)}</strong> at ${peakTime}`;
+      }
+
+      content.appendChild(this._buildOverlayChartCard({
+        title: "UV INDEX", unitLabel: "0\u201311+",
+        yLabels: [{ value: 0, text: "0" }, { value: 6, text: "6" }, { value: 11, text: "11" }],
+        values: uv, color: "#FFC107", fillColor: "rgba(255,193,7,0.1)",
+        yMin: 0, yMax: uvMax, times,
+        zones: [
+          { from: 8, to: uvMax, color: "rgba(244,67,54,0.08)", label: "Very High", labelColor: "rgba(244,67,54,0.5)" },
+          { from: 6, to: 8, color: "rgba(255,193,7,0.06)", label: "High", labelColor: "rgba(255,193,7,0.4)" },
+        ],
+        summary: uvSummary,
+      }));
+
+      const precipEntity = this._entity("precipitation_chance");
+      const maxPrecip = Math.max(...precip);
+      let precipSummary = "";
+      if (precipEntity) {
+        precipSummary = `Now: <strong>${precipEntity.state}%</strong>`;
+        if (maxPrecip > 20) {
+          const maxIdx = precip.indexOf(maxPrecip);
+          const maxTime = times[maxIdx]?.toLocaleTimeString([], { hour: "numeric" });
+          precipSummary += ` \u00B7 Peak: <strong>${maxPrecip}%</strong> at ${maxTime}`;
+        }
+      }
+
+      content.appendChild(this._buildOverlayChartCard({
+        title: "PRECIPITATION", unitLabel: "Probability %",
+        yLabels: [{ value: 0, text: "0%" }, { value: 50, text: "50%" }, { value: 100, text: "100%" }],
+        values: precip, color: "#9C27B0", fillColor: "rgba(156,39,176,0.1)",
+        yMin: 0, yMax: 100, times,
+        summary: precipSummary,
+      }));
+    }
+
+    content.appendChild(this._el("div", { className: "ov-footer", textContent: "Tap anywhere outside or swipe down to close" }));
+
+    let touchStartY = 0;
+    content.addEventListener("touchstart", (e) => { touchStartY = e.touches[0].clientY; }, { passive: true });
+    content.addEventListener("touchend", (e) => {
+      const dy = e.changedTouches[0].clientY - touchStartY;
+      if (dy > 80) this._closeOverlay();
+    }, { passive: true });
+
+    overlay.appendChild(content);
+    return overlay;
   }
 
   _styleEl() {
@@ -660,6 +1093,163 @@ class PaddleScoreCard extends HTMLElement {
       .detail-row:last-child { border-bottom: none; }
       .detail-row span:first-child {
         color: var(--secondary-text-color, #aaa);
+      }
+
+      /* ── Overlay ──────────────────────────────── */
+      .overlay {
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        z-index: 9999;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+      }
+      .overlay-visible { opacity: 1; }
+      .overlay-backdrop {
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.7);
+      }
+      .overlay-content {
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        overflow-y: auto;
+        background: #1e1e2e;
+        padding: 16px;
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        color: #ccc;
+        transform: translateY(40px);
+        transition: transform 0.3s ease;
+      }
+      .overlay-visible .overlay-content { transform: translateY(0); }
+      .ov-close {
+        position: absolute;
+        top: 12px; right: 16px;
+        font-size: 20px;
+        color: #888;
+        cursor: pointer;
+        z-index: 1;
+        padding: 4px 8px;
+      }
+      .ov-close:hover { color: #fff; }
+      .ov-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+      }
+      .ov-name {
+        font-size: 11px;
+        text-transform: uppercase;
+        color: #888;
+        letter-spacing: 1px;
+      }
+      .ov-date {
+        font-size: 13px;
+        margin-top: 2px;
+      }
+      .ov-score {
+        font-size: 40px;
+        font-weight: bold;
+        line-height: 1;
+      }
+      .ov-best {
+        font-size: 12px;
+        margin-top: 2px;
+      }
+      .ov-chart {
+        background: #2a2a3e;
+        border-radius: 8px;
+        padding: 14px;
+        margin-bottom: 12px;
+      }
+      .ov-chart-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        margin-bottom: 8px;
+      }
+      .ov-chart-title {
+        color: #aaa;
+        font-size: 11px;
+        font-weight: 600;
+      }
+      .ov-chart-unit {
+        color: #666;
+        font-size: 10px;
+      }
+      .ov-chart-legend {
+        display: flex;
+        gap: 12px;
+        font-size: 10px;
+      }
+      .ov-chart-area {
+        position: relative;
+        height: 70px;
+      }
+      .ov-ylabel {
+        position: absolute;
+        font-size: 9px;
+        color: #666;
+        transform: translateY(-50%);
+        white-space: nowrap;
+      }
+      .ov-gridline {
+        position: absolute;
+        left: 0; right: 0;
+        height: 1px;
+        background: #333;
+      }
+      .ov-gridline-dash {
+        border-top: 1px dashed #444;
+        background: none;
+      }
+      .ov-now-label {
+        position: absolute;
+        top: -12px;
+        font-size: 7px;
+        color: rgba(255,255,255,0.5);
+        transform: translateX(-50%);
+      }
+      .ov-zone-label {
+        position: absolute;
+        right: 4px;
+        font-size: 8px;
+      }
+      .ov-time-axis {
+        display: flex;
+        justify-content: space-between;
+        font-size: 9px;
+        color: #888;
+        margin-top: 6px;
+      }
+      .ov-sun-row {
+        display: flex;
+        justify-content: space-between;
+        font-size: 8px;
+        color: #555;
+        margin-top: 2px;
+      }
+      .ov-arrow-row {
+        display: flex;
+        justify-content: space-around;
+        margin-top: 4px;
+        font-size: 10px;
+        color: #555;
+      }
+      .ov-summary {
+        text-align: center;
+        font-size: 10px;
+        color: #ccc;
+        margin-top: 6px;
+      }
+      .ov-summary strong {
+        font-weight: 600;
+      }
+      .ov-footer {
+        text-align: center;
+        padding: 12px;
+        color: #666;
+        font-size: 11px;
       }
     `;
     return style;
