@@ -58,6 +58,9 @@ class USGSClient(BaseAPIClient):
             except (ValueError, TypeError):
                 continue
 
+            if num <= -999999:  # USGS no-data sentinel
+                continue
+
             if var_code == PARAM_WATER_TEMP:
                 water_temp_c = num
             elif var_code == PARAM_STREAMFLOW:

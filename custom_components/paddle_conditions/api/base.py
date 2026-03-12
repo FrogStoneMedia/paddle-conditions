@@ -31,15 +31,17 @@ class BaseAPIClient:
         self._timeout = timeout
         self._retries = retries
 
-    async def _get(self, url: str, params: dict[str, Any] | None = None) -> Any:
-        """Make a GET request with retry on 5xx. Returns the aiohttp response."""
+    async def _request(
+        self, url: str, params: dict[str, Any] | None, response_method: str
+    ) -> Any:
+        """Make a GET request with retry on 5xx, reading the body inside the timeout."""
         last_err: Exception | None = None
         for attempt in range(1 + self._retries):
             try:
                 async with asyncio.timeout(self._timeout):
-                    resp = await self._session.get(url, params=params)
-                    resp.raise_for_status()
-                    return resp
+                    async with self._session.get(url, params=params) as resp:
+                        resp.raise_for_status()
+                        return await getattr(resp, response_method)()
             except TimeoutError as err:
                 raise APIError(f"Timeout fetching {url}") from err
             except ClientResponseError as err:
@@ -54,11 +56,9 @@ class BaseAPIClient:
 
     async def _get_json(self, url: str, params: dict[str, Any] | None = None) -> Any:
         """Make a GET request and return parsed JSON."""
-        resp = await self._get(url, params)
-        return await resp.json()
+        return await self._request(url, params, "json")
 
     async def _get_text(self, url: str, params: dict[str, Any] | None = None) -> str:
         """Make a GET request and return raw text."""
-        resp = await self._get(url, params)
-        result: str = await resp.text()
+        result: str = await self._request(url, params, "text")
         return result

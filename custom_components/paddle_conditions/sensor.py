@@ -200,11 +200,13 @@ class PaddleSensor(CoordinatorEntity[PaddleCoordinator], SensorEntity):  # type:
     @property
     def native_value(self) -> StateType:
         """Return the sensor value."""
+        if self.coordinator.data is None:
+            return None
         return self.entity_description.value_fn(self.coordinator.data)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
         """Return additional state attributes."""
-        if self.entity_description.extra_attrs_fn is not None:
-            return self.entity_description.extra_attrs_fn(self.coordinator.data)
-        return None
+        if self.coordinator.data is None or self.entity_description.extra_attrs_fn is None:
+            return None
+        return self.entity_description.extra_attrs_fn(self.coordinator.data)

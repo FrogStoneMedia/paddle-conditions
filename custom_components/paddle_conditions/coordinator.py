@@ -111,9 +111,23 @@ class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):  # type: ignor
     async def _async_update_data(self) -> PaddleConditions:
         """Fetch data from all APIs and compute score."""
         # Launch all API calls in parallel for faster updates
-        try:
-            weather = await self.weather_client.fetch(self.latitude, self.longitude)
-        except Exception as err:
+        all_tasks: list[tuple[str, asyncio.Task[Any]]] = []
+        weather_task = asyncio.create_task(self.weather_client.fetch(self.latitude, self.longitude))
+        all_tasks.append(("weather", weather_task))
+        aqi_task = asyncio.create_task(self.aqi_client.fetch(self.latitude, self.longitude))
+        all_tasks.append(("aqi", aqi_task))
+        if self.usgs_station_id:
+            usgs_task = asyncio.create_task(self.usgs_client.fetch(self.usgs_station_id))
+            all_tasks.append(("usgs", usgs_task))
+        if self.noaa_station_id:
+            noaa_task = asyncio.create_task(self.noaa_client.fetch_water_temp(self.noaa_station_id))
+            all_tasks.append(("noaa", noaa_task))
+
+        await asyncio.gather(*(t for _, t in all_tasks), return_exceptions=True)
+
+        # Weather is required — fail or fall back to cache
+        if weather_task.exception() is not None:
+            err = weather_task.exception()
             if self.data is not None:
                 LOGGER.warning(
                     "Weather API failed for %s, using cached data: %s",
@@ -122,24 +136,15 @@ class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):  # type: ignor
                 )
                 return self.data
             raise UpdateFailed(f"Weather API failed: {err}") from err
+        weather = weather_task.result()
 
         aqi = None
         usgs = None
         noaa_water_temp = None
 
-        optional_tasks: list[tuple[str, asyncio.Task[Any]]] = []
-        aqi_task = asyncio.create_task(self.aqi_client.fetch(self.latitude, self.longitude))
-        optional_tasks.append(("aqi", aqi_task))
-        if self.usgs_station_id:
-            usgs_task = asyncio.create_task(self.usgs_client.fetch(self.usgs_station_id))
-            optional_tasks.append(("usgs", usgs_task))
-        if self.noaa_station_id:
-            noaa_task = asyncio.create_task(self.noaa_client.fetch_water_temp(self.noaa_station_id))
-            optional_tasks.append(("noaa", noaa_task))
-
-        await asyncio.gather(*(t for _, t in optional_tasks), return_exceptions=True)
-
-        for name, task in optional_tasks:
+        for name, task in all_tasks:
+            if name == "weather":
+                continue
             if task.exception() is not None:
                 LOGGER.warning(
                     "%s fetch failed for %s: %s",
@@ -265,7 +270,7 @@ class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):  # type: ignor
 
         for i in range(0, min(len(times), 48), 3):
             chunk_end = min(i + 3, len(times))
-            if chunk_end <= i:
+            if chunk_end - i < 3:
                 break
 
             block_winds = winds[i:chunk_end]

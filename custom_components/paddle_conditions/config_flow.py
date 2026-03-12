@@ -220,7 +220,7 @@ class PaddleOptionsFlow(OptionsFlow):  # type: ignore[misc]
             if new_activity and new_activity != current_activity:
                 from .profiles import get_profile
 
-                default_profile = DEFAULT_PROFILES[new_activity]
+                default_profile = DEFAULT_PROFILES.get(new_activity, PROFILE_RECREATIONAL)
                 user_input["profile"] = default_profile
                 profile = get_profile(new_activity, default_profile)
                 user_input["weights"] = profile.weights

@@ -53,6 +53,10 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the Paddle Conditions domain."""
+    if hass.data.get(f"{DOMAIN}_frontend"):
+        return True
+    hass.data[f"{DOMAIN}_frontend"] = True
+
     if hass.state is CoreState.running:
         await _async_register_frontend(hass)
     else:

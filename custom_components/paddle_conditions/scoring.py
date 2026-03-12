@@ -152,7 +152,7 @@ def score_streamflow(
 ) -> int | None:
     """Score streamflow (CFS). Optimal is location-specific.
 
-    At optimal -> 100, at 2x optimal -> ~64, at 4x optimal -> 0 (flood).
+    At optimal -> 100, at 2x optimal -> ~71, at 4x optimal -> 0 (flood).
     Below optimal: at 0.5x -> ~57, at 0.1x -> 0 (too low).
     """
     if value is None:
