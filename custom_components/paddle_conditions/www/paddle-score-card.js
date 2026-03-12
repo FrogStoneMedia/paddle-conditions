@@ -87,6 +87,41 @@ class PaddleScoreCard extends HTMLElement {
     return el;
   }
 
+  _filterDaylightBlocks(blocks) {
+    const sun = this._hass.states["sun.sun"];
+    if (!sun) return blocks;
+
+    const attrs = sun.attributes || {};
+    const rising = attrs.next_rising ? new Date(attrs.next_rising) : null;
+    const setting = attrs.next_setting ? new Date(attrs.next_setting) : null;
+    if (!rising || !setting) return blocks;
+
+    // Determine today's sunrise and sunset
+    // If sun is up: next_setting = today's sunset, next_rising = tomorrow's sunrise
+    // If sun is down: next_rising = next sunrise, next_setting = next sunset
+    const now = new Date();
+    const isUp = sun.state === "above_horizon";
+
+    let sunrise, sunset;
+    if (isUp) {
+      sunset = setting;
+      // sunrise was earlier today — approximate from next_rising minus 24h
+      sunrise = new Date(rising.getTime() - 24 * 60 * 60 * 1000);
+    } else {
+      sunrise = rising;
+      sunset = setting;
+    }
+
+    // Safe window: after sunrise, ending at least 2 hours before sunset
+    const cutoff = new Date(sunset.getTime() - 2 * 60 * 60 * 1000);
+
+    return blocks.filter((b) => {
+      const start = new Date(b.start);
+      const end = new Date(b.end);
+      return start >= sunrise && end <= cutoff;
+    });
+  }
+
   _degToCompass(deg) {
     const dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
     return dirs[Math.round(deg / 45) % 8];
@@ -133,20 +168,23 @@ class PaddleScoreCard extends HTMLElement {
     hero.appendChild(this._el("div", { className: "hero-rating", textContent: this._ratingLabel(rating) }));
 
     if (blocks.length > 0) {
-      const best = blocks.reduce((a, b) => b.score > a.score ? b : a, blocks[0]);
-      const now = new Date();
-      const bestStart = new Date(best.start);
-      const bestEnd = new Date(best.end);
-      const isCurrent = now >= bestStart && now < bestEnd;
+      const safeBlocks = this._filterDaylightBlocks(blocks);
+      if (safeBlocks.length > 0) {
+        const best = safeBlocks.reduce((a, b) => b.score > a.score ? b : a, safeBlocks[0]);
+        const now = new Date();
+        const bestStart = new Date(best.start);
+        const bestEnd = new Date(best.end);
+        const isCurrent = now >= bestStart && now < bestEnd;
 
-      let text;
-      if (isCurrent) {
-        text = `Best time: Now (${best.score})`;
-      } else {
-        const timeStr = bestStart.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-        text = `Best time: ${timeStr} (${best.score})`;
+        let text;
+        if (isCurrent) {
+          text = `Best time: Now (${best.score})`;
+        } else {
+          const timeStr = bestStart.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+          text = `Best time: ${timeStr} (${best.score})`;
+        }
+        hero.appendChild(this._el("div", { className: "hero-best", textContent: text }));
       }
-      hero.appendChild(this._el("div", { className: "hero-best", textContent: text }));
     }
     return hero;
   }
