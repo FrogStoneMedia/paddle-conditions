@@ -34,21 +34,49 @@ _CARD_FILES = ["paddle-score-card.js", "paddle-spots-card.js"]
 
 async def _async_register_frontend(hass: HomeAssistant) -> None:
     """Register static paths and Lovelace resources for custom cards."""
-    from homeassistant.components.frontend import add_extra_js_url
     from homeassistant.components.http import StaticPathConfig
 
     configs = [
         StaticPathConfig(
             url_path=f"/paddle_conditions/{card_file}",
             path=str(_CARDS_DIR / card_file),
-            cache_headers=True,
+            cache_headers=False,
         )
         for card_file in _CARD_FILES
     ]
     await hass.http.async_register_static_paths(configs)
 
-    for card_file in _CARD_FILES:
-        add_extra_js_url(hass, f"/paddle_conditions/{card_file}?v={_VERSION}")
+    # Register through the Lovelace resources collection so the companion
+    # app loads the cards reliably (add_extra_js_url only injects into the
+    # HTML page and isn't re-executed on app refresh).
+    # Register through the Lovelace resources collection so the companion
+    # app loads the cards reliably (add_extra_js_url only injects into the
+    # HTML page and isn't re-executed on app refresh).
+    try:
+        resources = hass.data["lovelace"].resources
+        existing = resources.async_items()
+        for card_file in _CARD_FILES:
+            url = f"/paddle_conditions/{card_file}"
+            versioned = f"{url}?v={_VERSION}"
+            found = False
+            for item in existing:
+                if url in str(item.get("url", "")):
+                    if item["url"] != versioned:
+                        await resources.async_update_item(
+                            item["id"], {"res_type": "module", "url": versioned}
+                        )
+                    found = True
+                    break
+            if not found:
+                await resources.async_create_item(
+                    {"res_type": "module", "url": versioned}
+                )
+    except Exception:  # noqa: BLE001
+        # Lovelace resources API unavailable (YAML mode, etc.) — fall back
+        from homeassistant.components.frontend import add_extra_js_url
+
+        for card_file in _CARD_FILES:
+            add_extra_js_url(hass, f"/paddle_conditions/{card_file}?v={_VERSION}")
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
