@@ -77,7 +77,7 @@ class OpenMeteoWeatherClient(BaseAPIClient):
     def __init__(self, session: ClientSession) -> None:
         super().__init__(session)
 
-    async def fetch(self, latitude: float, longitude: float) -> WeatherData:
+    async def fetch(self, latitude: float, longitude: float, timezone: str = "auto") -> WeatherData:
         """Fetch current weather and hourly forecast."""
         params = {
             "latitude": latitude,
@@ -89,6 +89,7 @@ class OpenMeteoWeatherClient(BaseAPIClient):
             "temperature_unit": "fahrenheit",
             "wind_speed_unit": "mph",
             "forecast_days": 2,
+            "timezone": timezone,
         }
         data = await self._get_json(WEATHER_URL, params=params)
         return self._parse(data)
