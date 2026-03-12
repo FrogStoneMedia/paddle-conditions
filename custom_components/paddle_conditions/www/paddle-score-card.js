@@ -22,8 +22,9 @@ class PaddleScoreCard extends HTMLElement {
     const base = this._config.entity.replace(/_paddle_score$/, "");
     const keys = [
       "paddle_score", "wind_speed", "wind_gusts", "wind_direction",
-      "air_temp", "water_temp", "uv_index", "aqi", "visibility",
-      "precipitation", "condition", "forecast_3hr",
+      "air_temperature", "water_temperature", "uv_index",
+      "air_quality_index", "visibility", "precipitation_chance",
+      "conditions", "3_hour_forecast",
     ];
     for (const k of keys) {
       if (prev.states[`${base}_${k}`] !== this._hass.states[`${base}_${k}`]) return true;
@@ -110,7 +111,7 @@ class PaddleScoreCard extends HTMLElement {
     const factors = attrs.factors || {};
     const name = (attrs.friendly_name || "").replace(/ Paddle Score$/i, "");
 
-    const forecastEntity = this._entity("forecast_3hr");
+    const forecastEntity = this._entity("3_hour_forecast");
     const blocks = forecastEntity?.attributes?.blocks || [];
 
     this.shadowRoot.textContent = "";
@@ -143,11 +144,11 @@ class PaddleScoreCard extends HTMLElement {
   _buildFactorGrid(factors) {
     const meta = [
       { key: "wind_speed", icon: "\uD83D\uDCA8", label: "Wind", suffix: "wind_speed", gustSuffix: "wind_gusts", dirSuffix: "wind_direction", unit: "mph" },
-      { key: "air_quality", icon: "\uD83C\uDF2C\uFE0F", label: "Air Quality", suffix: "aqi", unit: "AQI" },
-      { key: "temperature", icon: "\uD83C\uDF21\uFE0F", label: "Temperature", suffix: "air_temp", waterSuffix: "water_temp", unit: "\u00B0F" },
+      { key: "air_quality", icon: "\uD83C\uDF2C\uFE0F", label: "Air Quality", suffix: "air_quality_index", unit: "AQI" },
+      { key: "temperature", icon: "\uD83C\uDF21\uFE0F", label: "Temperature", suffix: "air_temperature", waterSuffix: "water_temperature", unit: "\u00B0F" },
       { key: "uv_index", icon: "\u2600\uFE0F", label: "UV Index", suffix: "uv_index", unit: "" },
-      { key: "visibility", icon: "\uD83D\uDC41\uFE0F", label: "Visibility", suffix: "visibility", unit: "mi" },
-      { key: "precipitation", icon: "\uD83C\uDF27\uFE0F", label: "Precipitation", suffix: "precipitation", unit: "%" },
+      { key: "visibility", icon: "\uD83D\uDC41\uFE0F", label: "Visibility", suffix: "visibility", unit: "mi", round: 1 },
+      { key: "precipitation", icon: "\uD83C\uDF27\uFE0F", label: "Precipitation", suffix: "precipitation_chance", unit: "%" },
     ];
 
     const grid = this._el("div", { className: "factor-grid" });
@@ -156,7 +157,10 @@ class PaddleScoreCard extends HTMLElement {
       if (factors[f.key] == null) continue;
       const subScore = factors[f.key];
       const entity = this._entity(f.suffix);
-      const rawVal = entity ? entity.state : "—";
+      let rawVal = entity ? entity.state : "—";
+      if (f.round != null && rawVal !== "—" && !isNaN(parseFloat(rawVal))) {
+        rawVal = parseFloat(rawVal).toFixed(f.round);
+      }
       let detail = `${rawVal}${f.unit ? " " + f.unit : ""}`;
 
       if (f.gustSuffix) {
