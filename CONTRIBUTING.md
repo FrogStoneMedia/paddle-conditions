@@ -59,42 +59,44 @@ pytest tests/test_scoring.py -v
 ## Project Structure
 
 ```
-ha-integration/
-├── custom_components/
-│   └── paddle_conditions/
-│       ├── __init__.py          # Entry setup / teardown
-│       ├── config_flow.py       # Config + subentry + options flows
-│       ├── coordinator.py       # DataUpdateCoordinator (one per location)
-│       ├── sensor.py            # Sensor entity definitions
-│       ├── scoring.py           # Scoring engine (pure functions)
-│       ├── profiles.py          # Profile definitions (curves, weights, vetoes)
-│       ├── models.py            # Data models (PaddleScore, PaddleConditions, etc.)
-│       ├── cloud_sync.py        # Cloud sync client
-│       ├── const.py             # Constants and config keys
-│       ├── diagnostics.py       # HA diagnostics with key redaction
-│       └── api/
-│           ├── base.py          # Base API client (retry, timeout)
-│           ├── open_meteo.py    # Weather + AQI clients
-│           ├── usgs.py          # USGS water data client
-│           └── noaa.py          # NOAA tide/temperature client
-├── tests/
-│   ├── conftest.py              # Shared fixtures
-│   ├── fixtures/                # Recorded API responses
-│   ├── test_scoring.py
-│   ├── test_profiles.py
-│   ├── test_coordinator.py
-│   ├── test_config_flow.py
-│   ├── test_sensor.py
-│   ├── test_api_open_meteo.py
-│   ├── test_api_usgs.py
-│   ├── test_api_noaa.py
-│   ├── test_cloud_sync.py
-│   └── test_diagnostics.py
-├── docs/
-│   ├── SCORING.md               # Scoring algorithm documentation
-│   ├── API-SOURCES.md           # Data source reference
-│   └── ARCHITECTURE.md          # System design overview
-└── requirements_test.txt
+custom_components/
+└── paddle_conditions/
+    ├── __init__.py              # Entry setup, frontend registration
+    ├── config_flow.py           # Config + subentry + options + reconfigure flows
+    ├── coordinator.py           # DataUpdateCoordinator (one per location, with disk cache)
+    ├── sensor.py                # Sensor entity definitions
+    ├── scoring.py               # Scoring engine (pure functions)
+    ├── profiles.py              # Profile definitions (curves, weights, vetoes)
+    ├── models.py                # Data models (PaddleScore, PaddleConditions, etc.)
+    ├── cloud_sync.py            # Cloud sync client
+    ├── const.py                 # Constants and config keys
+    ├── diagnostics.py           # HA diagnostics with key redaction
+    ├── presets.py               # Preset location definitions
+    ├── dashboard_generator.py   # Service action: generates dashboard YAML
+    ├── strings.json             # UI strings and translations
+    ├── www/                     # Bundled Lovelace card JS files
+    │   ├── paddle-score-card.js
+    │   └── paddle-spots-card.js
+    ├── brand/                   # Integration icon/logo assets
+    └── api/
+        ├── base.py              # Base API client (retry, timeout)
+        ├── open_meteo.py        # Weather + AQI clients
+        ├── usgs.py              # USGS water data client
+        └── noaa.py              # NOAA tide/temperature client
+tests/
+├── conftest.py                  # Shared fixtures
+├── fixtures/                    # Recorded API responses
+├── test_scoring.py
+├── test_profiles.py
+├── test_coordinator.py
+├── test_config_flow.py
+├── test_sensor.py
+├── test_frontend.py
+├── test_api_open_meteo.py
+├── test_api_usgs.py
+├── test_api_noaa.py
+├── test_cloud_sync.py
+└── test_diagnostics.py
 ```
 
 ---

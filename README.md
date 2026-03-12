@@ -46,12 +46,11 @@ I built this because I was tired of checking four different apps before every pa
 
 ### Bundled dashboard cards
 Custom Lovelace cards ship with the integration. No extra HACS card downloads needed.
-- `paddle-score-card`: hero score with Go/Caution/No-go rating
-- `paddle-factors-card`: factor breakdown with progress bars
-- `paddle-chips-card`: location navigation chips
-- `paddle-forecast-card`: 3-hour forecast table with best window
-- `paddle-chart-card`: Chart.js line/bar graphs for score, wind, temp, UV
-- `paddle-history-card`: score history with configurable range and stats
+- **`paddle-score-card`**: all-in-one card with hero score, Go/Caution/No-go rating, best time to paddle, factor grid with tap-to-expand hourly forecasts, and 3-hour forecast timeline
+- **`paddle-spots-card`**: multi-location comparison with color-coded score badges for quick spot selection
+
+### Caching
+API data is cached to disk after each successful fetch. On restart, cached data loads immediately so your dashboard renders before APIs respond. If a weather API call fails, the integration falls back to cached data instead of going unavailable.
 
 ---
 
@@ -97,9 +96,18 @@ For each location you need:
 | Latitude | Yes | Decimal degrees (right-click on Google Maps to copy) |
 | Longitude | Yes | Decimal degrees |
 | Water body type | Yes | Lake, River, or Bay/Ocean. Controls which data sources and scoring factors apply. |
-| USGS station ID | No | For river streamflow data. Find yours at [waterdata.usgs.gov](https://waterdata.usgs.gov) |
+| USGS station ID | No | For water temperature and river streamflow. Find yours at [waterdata.usgs.gov](https://waterdata.usgs.gov) |
 | NOAA station ID | No | For water temperature and tides. Find yours at [tidesandcurrents.noaa.gov](https://tidesandcurrents.noaa.gov) |
 | Optimal streamflow | No | Preferred river flow in CFS (river locations only) |
+
+### Editing a location
+
+To change a location's settings (e.g. adding a USGS station ID for water temperature):
+
+1. Go to **Settings > Devices & Services > Paddle Conditions**
+2. Click the three-dot menu next to the location you want to edit
+3. Select **Reconfigure**
+4. Update any fields and submit — the integration reloads automatically
 
 ### Options
 
@@ -132,7 +140,7 @@ Each location creates 12 sensors:
 | `precipitation` | % | Precipitation probability |
 | `streamflow` | CFS | River flow rate (river locations only, requires USGS station) |
 | `condition` | | Weather description (e.g. "Clear sky", "Thunderstorm") |
-| `forecast_3hr` | | 3-hour forecast blocks with per-block scores |
+| `forecast_3hr` | | 3-hour forecast blocks with per-block scores and hourly data |
 
 ### Paddle score attributes
 
@@ -149,8 +157,10 @@ The `paddle_score` sensor exposes these attributes:
 
 The `forecast_3hr` sensor provides:
 - Up to 8 forecast blocks (24 hours)
-- Each block has score, rating, wind, temperature, UV, start/end times
+- Each block has score, rating, wind, temperature, UV, precipitation, start/end times
 - `best_block` and `best_score` answer "when should I go?"
+- Hourly arrays (`hourly_times`, `hourly_wind`, `hourly_temp`, `hourly_uv`, `hourly_precip`) for granular per-hour data
+- All times are in the location's local timezone
 
 ---
 
@@ -179,7 +189,18 @@ Weights are customizable. Profiles provide good defaults: Racing tolerates more 
 
 ## Dashboard
 
-The integration generates a ready-to-use dashboard based on your configured locations. Each location gets a score gauge, conditions at a glance, and a 24-hour history graph. All cards are built-in Home Assistant types — no extra HACS card downloads needed.
+The integration bundles two custom Lovelace cards and a service action that generates a complete dashboard config for all your locations.
+
+### Cards
+
+**`paddle-score-card`** — The main card for each location. Shows:
+- Hero section with paddle score, Go/Caution/No-go rating, and date
+- Best time to paddle (filtered to daylight hours, at least 2 hours before sunset)
+- Factor grid (wind, AQI, temperature, UV, visibility, precipitation) with score bars
+- Tap any factor tile to expand hourly forecasts (sunrise-1h to sunset+1h)
+- 3-hour forecast timeline with per-block scores, wind, and temperature
+
+**`paddle-spots-card`** — Multi-location comparison card with color-coded score badges. Useful when you have several spots and want to see at a glance which one is best today.
 
 ### Getting the dashboard
 
@@ -201,7 +222,7 @@ All APIs are free, public, and need no authentication.
 
 | Source | Data | Required |
 |--------|------|----------|
-| [Open-Meteo Weather](https://open-meteo.com/) | Wind, temperature, UV, visibility, precipitation, weather codes, 48-hour hourly forecast | Yes |
+| [Open-Meteo Weather](https://open-meteo.com/) | Wind, temperature, UV, visibility, precipitation, weather codes, 48-hour hourly forecast (local timezone) | Yes |
 | [Open-Meteo Air Quality](https://open-meteo.com/) | US AQI, PM2.5, PM10, ozone | Yes |
 | [USGS Water Services](https://waterservices.usgs.gov/) | Water temperature, streamflow (CFS) | No, river locations |
 | [NOAA CO-OPS](https://tidesandcurrents.noaa.gov/) | Water temperature, tide predictions | No, bay/ocean locations |
@@ -229,9 +250,14 @@ USGS and NOAA are optional. If a station is unavailable, those factors drop out 
 - Review your profile weights in **Configure**. The default profile may not match how you paddle.
 - Hard vetoes (thunderstorm, extreme wind) override the calculated score entirely.
 
-### Cards not appearing
-- Cards register when the integration loads. If they don't show in the card picker, clear your browser cache or restart HA.
+### Cards not appearing or showing stale data
+- Cards register when the integration loads. If they don't show in the card picker, restart HA.
+- If cards show old data after an update, clear your browser cache (the JS URL includes a version parameter, but aggressive caching may require a hard refresh).
 - Check the browser console (F12) for JavaScript errors.
+
+### Hourly temperatures seem wrong
+- Make sure you're on version 1.0.3 or later. Earlier versions fetched hourly data in UTC, causing temperature/wind values to be offset by your timezone difference.
+- After updating, restart HA and wait for the next data refresh.
 
 ---
 
