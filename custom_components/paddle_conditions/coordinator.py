@@ -210,6 +210,7 @@ class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):  # type: ignor
         temps = weather.hourly_temp
         uvs = weather.hourly_uv
         codes = weather.hourly_weather_codes
+        precips = weather.hourly_precip
 
         if not times:
             return blocks
@@ -223,10 +224,12 @@ class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):  # type: ignor
             block_temps = temps[i:chunk_end]
             block_uvs = uvs[i:chunk_end]
             block_codes = codes[i:chunk_end] if codes else []
+            block_precips = precips[i:chunk_end] if precips else []
 
             max_wind = max(block_winds) if block_winds else 0
             avg_temp = sum(block_temps) / len(block_temps) if block_temps else 0
             max_uv = max(block_uvs) if block_uvs else 0
+            max_precip = max(block_precips) if block_precips else 0
             has_thunderstorm = any(c in THUNDERSTORM_CODES for c in block_codes)
 
             block_score = compute_paddle_score(
@@ -257,6 +260,7 @@ class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):  # type: ignor
                     wind_mph=max_wind,
                     temp_f=round(avg_temp, 1),
                     uv=round(max_uv, 1),
+                    precip_pct=max_precip,
                 )
             )
 

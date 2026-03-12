@@ -87,38 +87,50 @@ class PaddleScoreCard extends HTMLElement {
     return el;
   }
 
-  _filterDaylightBlocks(blocks) {
+  _getSunWindow() {
     const sun = this._hass.states["sun.sun"];
-    if (!sun) return blocks;
+    if (!sun) return null;
 
     const attrs = sun.attributes || {};
     const rising = attrs.next_rising ? new Date(attrs.next_rising) : null;
     const setting = attrs.next_setting ? new Date(attrs.next_setting) : null;
-    if (!rising || !setting) return blocks;
+    if (!rising || !setting) return null;
 
-    // Determine today's sunrise and sunset
-    // If sun is up: next_setting = today's sunset, next_rising = tomorrow's sunrise
-    // If sun is down: next_rising = next sunrise, next_setting = next sunset
-    const now = new Date();
     const isUp = sun.state === "above_horizon";
-
     let sunrise, sunset;
     if (isUp) {
       sunset = setting;
-      // sunrise was earlier today — approximate from next_rising minus 24h
       sunrise = new Date(rising.getTime() - 24 * 60 * 60 * 1000);
     } else {
       sunrise = rising;
       sunset = setting;
     }
+    return { sunrise, sunset };
+  }
 
-    // Safe window: after sunrise, ending at least 2 hours before sunset
-    const cutoff = new Date(sunset.getTime() - 2 * 60 * 60 * 1000);
+  _filterDaylightBlocks(blocks) {
+    const win = this._getSunWindow();
+    if (!win) return blocks;
 
+    // Best time: after sunrise, ending 2h before sunset
+    const cutoff = new Date(win.sunset.getTime() - 2 * 60 * 60 * 1000);
     return blocks.filter((b) => {
       const start = new Date(b.start);
       const end = new Date(b.end);
-      return start >= sunrise && end <= cutoff;
+      return start >= win.sunrise && end <= cutoff;
+    });
+  }
+
+  _filterDisplayBlocks(blocks) {
+    const win = this._getSunWindow();
+    if (!win) return blocks;
+
+    // Display range: 1h before sunrise to 1h after sunset
+    const from = new Date(win.sunrise.getTime() - 60 * 60 * 1000);
+    const to = new Date(win.sunset.getTime() + 60 * 60 * 1000);
+    return blocks.filter((b) => {
+      const start = new Date(b.start);
+      return start >= from && start <= to;
     });
   }
 
@@ -195,6 +207,7 @@ class PaddleScoreCard extends HTMLElement {
       wind_speed: { field: "wind_mph", unit: "mph", label: "Wind" },
       temperature: { field: "temp_f", unit: "\u00B0F", label: "Temp" },
       uv_index: { field: "uv", unit: "", label: "UV" },
+      precipitation: { field: "precip_pct", unit: "%", label: "Precip" },
     };
 
     const meta = [
@@ -256,7 +269,8 @@ class PaddleScoreCard extends HTMLElement {
       // Forecast drill-down when expanded
       if (isExpanded && hasForecast) {
         const bfm = blockFieldMap[f.key];
-        tile.appendChild(this._buildFactorForecast(blocks, bfm));
+        const displayBlocks = this._filterDisplayBlocks(blocks);
+        tile.appendChild(this._buildFactorForecast(displayBlocks, bfm));
       }
 
       if (hasForecast) {
@@ -298,7 +312,8 @@ class PaddleScoreCard extends HTMLElement {
   }
 
   _buildForecast(blocks) {
-    if (!blocks.length) return null;
+    const displayBlocks = this._filterDisplayBlocks(blocks);
+    if (!displayBlocks.length) return null;
 
     const section = this._el("div", { className: "forecast-section" });
     section.appendChild(this._el("div", { className: "forecast-title", textContent: "Forecast" }));
@@ -306,7 +321,7 @@ class PaddleScoreCard extends HTMLElement {
     const row = this._el("div", { className: "forecast-row" });
     const now = new Date();
 
-    blocks.forEach((b, i) => {
+    displayBlocks.forEach((b, i) => {
       const start = new Date(b.start);
       const end = new Date(b.end);
       const isCurrent = now >= start && now < end;
@@ -334,8 +349,8 @@ class PaddleScoreCard extends HTMLElement {
 
     section.appendChild(row);
 
-    if (this._expandedBlock != null && this._expandedBlock < blocks.length) {
-      const b = blocks[this._expandedBlock];
+    if (this._expandedBlock != null && this._expandedBlock < displayBlocks.length) {
+      const b = displayBlocks[this._expandedBlock];
       const detail = this._el("div", { className: "expanded-detail" });
 
       const rows = [

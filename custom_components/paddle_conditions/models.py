@@ -39,6 +39,7 @@ class ForecastBlock:
     wind_mph: float
     temp_f: float
     uv: float
+    precip_pct: int
 
 
 @dataclass(frozen=True)

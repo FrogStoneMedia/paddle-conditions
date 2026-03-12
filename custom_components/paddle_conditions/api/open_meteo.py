@@ -58,6 +58,7 @@ class WeatherData:
     hourly_uv: list[float]
     hourly_times: list[str]
     hourly_weather_codes: list[int]
+    hourly_precip: list[int]
 
 
 @dataclass(frozen=True)
@@ -84,7 +85,7 @@ class OpenMeteoWeatherClient(BaseAPIClient):
             "current": "wind_speed_10m,wind_gusts_10m,wind_direction_10m,"
             "temperature_2m,uv_index,visibility,"
             "precipitation_probability,weather_code",
-            "hourly": "wind_speed_10m,temperature_2m,uv_index,weather_code",
+            "hourly": "wind_speed_10m,temperature_2m,uv_index,precipitation_probability,weather_code",
             "temperature_unit": "fahrenheit",
             "wind_speed_unit": "mph",
             "forecast_days": 2,
@@ -117,6 +118,7 @@ class OpenMeteoWeatherClient(BaseAPIClient):
             hourly_uv=hourly.get("uv_index", []),
             hourly_times=hourly.get("time", []),
             hourly_weather_codes=hourly.get("weather_code", []),
+            hourly_precip=hourly.get("precipitation_probability", []),
         )
 
 

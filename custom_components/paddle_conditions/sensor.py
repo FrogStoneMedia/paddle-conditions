@@ -145,6 +145,7 @@ SENSOR_DESCRIPTIONS: tuple[PaddleSensorEntityDescription, ...] = (
                     "wind_mph": b.wind_mph,
                     "temp_f": b.temp_f,
                     "uv": b.uv,
+                    "precip_pct": b.precip_pct,
                 }
                 for b in data.forecast_blocks
             ],
