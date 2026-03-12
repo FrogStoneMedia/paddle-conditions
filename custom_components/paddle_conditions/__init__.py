@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 
@@ -16,7 +17,7 @@ from homeassistant.core import (
 )
 from homeassistant.helpers.typing import ConfigType
 
-from .const import DOMAIN, SUBENTRY_TYPE_LOCATION
+from .const import DOMAIN, LOGGER, SUBENTRY_TYPE_LOCATION
 from .coordinator import PaddleConfigEntry, PaddleCoordinator
 from .dashboard_generator import generate_dashboard
 
@@ -68,11 +69,26 @@ async def async_setup_entry(hass: HomeAssistant, entry: PaddleConfigEntry) -> bo
     """Set up Paddle Conditions from a config entry."""
     coordinators: dict[str, PaddleCoordinator] = {}
 
+    # Create all coordinators first, then refresh in parallel to avoid
+    # serial API timeouts blocking setup (each timeout is 10s).
+    pending: list[tuple[str, PaddleCoordinator]] = []
     for subentry_id, subentry in entry.subentries.items():
         if subentry.subentry_type == SUBENTRY_TYPE_LOCATION:
             coordinator = PaddleCoordinator(hass, entry, subentry_id, subentry)
-            await coordinator.async_config_entry_first_refresh()
-            coordinators[subentry_id] = coordinator
+            pending.append((subentry_id, coordinator))
+
+    # Refresh all locations concurrently
+    results = await asyncio.gather(
+        *(c.async_config_entry_first_refresh() for _, c in pending),
+        return_exceptions=True,
+    )
+
+    for (subentry_id, coordinator), result in zip(pending, results):
+        if isinstance(result, Exception):
+            LOGGER.warning(
+                "First refresh failed for %s: %s", coordinator.location_name, result
+            )
+        coordinators[subentry_id] = coordinator
 
     entry.runtime_data = coordinators
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

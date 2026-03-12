@@ -93,7 +93,20 @@ class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):  # type: ignor
                 LOGGER.debug("Loaded cached data for %s", self.location_name)
             except (KeyError, TypeError, ValueError):
                 LOGGER.warning("Corrupt cache for %s, ignoring", self.location_name)
-        await super().async_config_entry_first_refresh()
+
+        if self.data is not None:
+            # Cache loaded — attempt refresh but don't fail setup if APIs are down.
+            # The coordinator will retry on its normal interval.
+            try:
+                await super().async_config_entry_first_refresh()
+            except Exception:  # noqa: BLE001
+                LOGGER.warning(
+                    "API refresh failed for %s on startup, using cached data",
+                    self.location_name,
+                )
+        else:
+            # No cache — must succeed or raise ConfigEntryNotReady
+            await super().async_config_entry_first_refresh()
 
     async def _async_update_data(self) -> PaddleConditions:
         """Fetch data from all APIs and compute score."""
