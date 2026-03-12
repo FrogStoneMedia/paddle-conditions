@@ -1,43 +1,64 @@
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="bg" x1="160" y1="140" x2="864" y2="884" gradientUnits="userSpaceOnUse">
+    <linearGradient id="bg" x1="180" y1="160" x2="860" y2="870" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#1976D2"/>
-      <stop offset="1" stop-color="#26A69A"/>
+      <stop offset="1" stop-color="#64D8E6"/>
     </linearGradient>
-    <linearGradient id="seg1" x1="348" y1="604" x2="424" y2="604" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#43A047"/>
-      <stop offset="1" stop-color="#66BB6A"/>
+    <linearGradient id="centerBlue" x1="402" y1="460" x2="620" y2="770" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1094D8"/>
+      <stop offset="1" stop-color="#167FC5"/>
     </linearGradient>
-    <linearGradient id="seg2" x1="460" y1="572" x2="564" y2="572" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#FDD835"/>
-      <stop offset="1" stop-color="#FFEE58"/>
+    <linearGradient id="segBlueL" x1="240" y1="576" x2="390" y2="474" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1D88D4"/>
+      <stop offset="1" stop-color="#31B8D9"/>
     </linearGradient>
-    <linearGradient id="seg3" x1="598" y1="604" x2="676" y2="604" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#FB8C00"/>
-      <stop offset="1" stop-color="#FFA726"/>
+    <linearGradient id="segGreen" x1="410" y1="365" x2="580" y2="455" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#75D39B"/>
+      <stop offset="1" stop-color="#8FDCAC"/>
     </linearGradient>
-    <filter id="shadow" x="0" y="0" width="1024" height="1024" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
-      <feDropShadow dx="0" dy="18" stdDeviation="24" flood-color="#0B3554" flood-opacity="0.18"/>
+    <linearGradient id="segYellow" x1="628" y1="435" x2="760" y2="560" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F6C64E"/>
+      <stop offset="1" stop-color="#F4D56A"/>
+    </linearGradient>
+    <linearGradient id="segGreenR" x1="732" y1="556" x2="784" y2="620" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#279B8B"/>
+      <stop offset="1" stop-color="#2E8C84"/>
+    </linearGradient>
+    <filter id="shadow" x="40" y="40" width="944" height="944" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="24" stdDeviation="24" flood-color="#0A5D97" flood-opacity="0.18"/>
+    </filter>
+    <filter id="innerGlow" x="220" y="250" width="600" height="430" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#0B80BF" flood-opacity="0.14"/>
     </filter>
   </defs>
 
-  <rect x="96" y="96" width="832" height="832" rx="188" fill="url(#bg)"/>
-
   <g filter="url(#shadow)">
-    <!-- Gauge -->
-    <path d="M338 676C338 580.492 415.492 503 511 503C606.508 503 684 580.492 684 676" stroke="white" stroke-width="44" stroke-linecap="round"/>
-    <path d="M359 676C363 622 390 581 429 550" stroke="url(#seg1)" stroke-width="26" stroke-linecap="round"/>
-    <path d="M469 530C496 520 528 520 554 530" stroke="url(#seg2)" stroke-width="26" stroke-linecap="round"/>
-    <path d="M592 549C630 578 658 621 663 676" stroke="url(#seg3)" stroke-width="26" stroke-linecap="round"/>
+    <rect x="120" y="120" width="784" height="784" rx="126" fill="url(#bg)"/>
+  </g>
 
-    <!-- Paddle -->
-    <g>
-      <rect x="493" y="330" width="38" height="308" rx="19" fill="white"/>
-      <path d="M447 236C447 190.16 484.16 153 530 153C575.84 153 613 190.16 613 236V324C613 357.137 586.137 384 553 384H507C473.863 384 447 357.137 447 324V236Z" fill="white"/>
-      <path d="M479 130C489 117 505 108 530 108C553 108 571 116 581 130C552 141 525 146 479 130Z" fill="white" fill-opacity="0.14"/>
-    </g>
+  <!-- gauge segments -->
+  <g filter="url(#innerGlow)">
+    <path d="M286 592 A226 226 0 0 1 390 391 L436 455 A136 136 0 0 0 374 550 Z" fill="url(#segBlueL)"/>
+    <path d="M414 370 A226 226 0 0 1 612 370 L569 447 A136 136 0 0 0 458 447 Z" fill="url(#segGreen)"/>
+    <path d="M640 391 A226 226 0 0 1 738 550 L651 550 A136 136 0 0 0 594 456 Z" fill="url(#segYellow)"/>
+    <path d="M747 575 A226 226 0 0 1 738 592 L660 550 A136 136 0 0 0 655 560 Z" fill="url(#segGreenR)"/>
 
-    <!-- Center hub -->
-    <circle cx="512" cy="676" r="20" fill="white"/>
+    <!-- outer gauge ring -->
+    <path d="M270 594 A242 242 0 0 1 754 594" stroke="white" stroke-width="22" stroke-linecap="round"/>
+    <!-- separators -->
+    <path d="M367 534 L405 436" stroke="white" stroke-width="18" stroke-linecap="round"/>
+    <path d="M512 432 L512 332" stroke="white" stroke-width="18" stroke-linecap="round" opacity="0"/>
+    <path d="M585 436 L627 534" stroke="white" stroke-width="18" stroke-linecap="round"/>
+    <path d="M281 525 L377 552" stroke="white" stroke-width="18" stroke-linecap="round"/>
+    <path d="M648 552 L743 525" stroke="white" stroke-width="18" stroke-linecap="round"/>
+  </g>
+
+  <!-- center semicircle -->
+  <path d="M358 594 C358 504 429 432 512 432 C595 432 666 504 666 594" fill="url(#centerBlue)"/>
+
+  <!-- paddle -->
+  <g filter="url(#shadow)">
+    <path d="M516 387 C490 387 470 406 470 430 L470 518 C470 547 478 575 494 596 L500 604 L500 716 C500 734 486 748 468 748 C458 748 449 757 449 767 C449 779 459 788 471 788 L553 788 C565 788 575 779 575 767 C575 757 566 748 556 748 C538 748 524 734 524 716 L524 604 L530 596 C546 575 554 547 554 518 L554 430 C554 406 534 387 508 387 Z" fill="#F2F2F2"/>
+    <path d="M508 432 L508 571 L524 604 L524 716 C524 734 538 748 556 748 C566 748 575 757 575 767 C575 779 565 788 553 788 L512 788 Z" fill="#E7E7E7"/>
   </g>
 </svg>
