@@ -227,9 +227,9 @@ All APIs are free, public, and need no authentication.
 | [USGS Water Services](https://waterservices.usgs.gov/) | Water temperature, streamflow (CFS) | No, river locations |
 | [NOAA CO-OPS](https://tidesandcurrents.noaa.gov/) | Water temperature, tide predictions | No, bay/ocean locations |
 
-Weather and AQI are required. Without them the integration won't load.
+Weather and AQI are required for scoring. Without them the integration won't produce a score.
 
-USGS and NOAA are optional. If a station is unavailable, those factors drop out and weights renormalize automatically. All API calls run in parallel. Failed requests retry with exponential backoff.
+USGS and NOAA are optional. If a station is unavailable, those factors drop out and weights renormalize automatically. All API calls run in parallel, both across data sources and across locations. Failed requests retry with exponential backoff. If APIs are unreachable on startup, the integration loads from cached data instead of blocking.
 
 ---
 
@@ -254,6 +254,10 @@ USGS and NOAA are optional. If a station is unavailable, those factors drop out 
 - Cards register when the integration loads. If they don't show in the card picker, restart HA.
 - If cards show old data after an update, clear your browser cache (the JS URL includes a version parameter, but aggressive caching may require a hard refresh).
 - Check the browser console (F12) for JavaScript errors.
+
+### Cards show "Configuration error" on startup
+- This usually means the HA server was too busy to serve the card JavaScript while APIs were timing out. Version 1.0.4 fixed this by refreshing all locations in parallel and falling back to cached data when APIs are slow.
+- If you still see it, restart HA. Once the first successful fetch completes, cached data prevents this on future restarts.
 
 ### Hourly temperatures seem wrong
 - Make sure you're on version 1.0.3 or later. Earlier versions fetched hourly data in UTC, causing temperature/wind values to be offset by your timezone difference.
