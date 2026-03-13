@@ -1,0 +1,63 @@
+# Changelog
+
+## 1.0.6
+
+### Added
+- Detail overlay: tap the score hero to see full-screen stacked line charts for paddle score, wind, temperature, UV index, and precipitation
+- Smooth rounded SVG lines with synced "now" marker across all charts
+- Sunrise/sunset markers on score chart, wind direction arrows, UV danger zones
+- Swipe-down-to-close and Escape key dismiss on overlay
+
+### Fixed
+- Companion app "configuration error" on pull-to-refresh: register cards through Lovelace resources collection instead of add_extra_js_url
+- Overlay header layout: centered score with separated close button (no overlap)
+- Disabled cache_headers on static paths to prevent stale JS in mobile WebViews
+
+## 1.0.5
+
+### Fixed
+- Sensor crash when coordinator.data is None (added None guards)
+- Response pool leak: read body inside async context manager timeout
+- USGS -999999 no-data sentinel values now filtered
+- Weather fetch runs in parallel with other API calls (was sequential)
+- Frontend JS double-registration on integration reload
+- KeyError in options flow when activity has no default profile
+- Zero-duration forecast blocks no longer generated
+- Corrected scoring docstring and documentation arithmetic examples
+
+## 1.0.4
+
+### Fixed
+- Startup freeze: parallelize coordinator refresh with asyncio.gather
+- Use cache fallback when first refresh fails
+- Hourly data timezone: use local time instead of UTC
+
+## 1.0.3
+
+### Added
+- Dashboard cards: paddle-score-card and paddle-spots-card
+- Service action for generating dashboard YAML
+- Subentry reconfigure flow for editing existing locations
+
+## 1.0.2
+
+### Added
+- 3-hour forecast blocks with per-block scoring
+- Hourly data arrays (wind, temp, UV, precipitation)
+- Factor drill-down in score card
+
+## 1.0.1
+
+### Added
+- USGS water temperature and streamflow support
+- NOAA tide and coastal water temperature
+- Multiple paddler profiles (Recreational, Racing, Family)
+
+## 1.0.0
+
+### Added
+- Initial release
+- Open-Meteo weather and AQI integration
+- Paddle score computation with 7 weighted factors
+- Config flow with location subentries
+- Cloud sync (optional)
