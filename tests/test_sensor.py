@@ -179,8 +179,19 @@ class TestPaddleSensor:
     def test_forecast_value_with_blocks(self):
         """Forecast sensor returns first block score."""
         blocks = [
-            ForecastBlock(start="12:00", end="15:00", score=78, rating="GO", wind_mph=10.0, temp_f=72.0, uv=5.0, precip_pct=0),
-            ForecastBlock(start="15:00", end="18:00", score=65, rating="CAUTION", wind_mph=15.0, temp_f=70.0, uv=3.0, precip_pct=10),
+            ForecastBlock(
+                start="12:00", end="15:00", score=78, rating="GO", wind_mph=10.0, temp_f=72.0, uv=5.0, precip_pct=0
+            ),
+            ForecastBlock(
+                start="15:00",
+                end="18:00",
+                score=65,
+                rating="CAUTION",
+                wind_mph=15.0,
+                temp_f=70.0,
+                uv=3.0,
+                precip_pct=10,
+            ),
         ]
         coordinator = _make_coordinator(_make_conditions(forecast_blocks=blocks))
         desc = next(d for d in SENSOR_DESCRIPTIONS if d.key == "forecast_3hr")
@@ -197,8 +208,12 @@ class TestPaddleSensor:
     def test_forecast_extra_attributes(self):
         """Forecast sensor includes block details and best block."""
         blocks = [
-            ForecastBlock(start="12:00", end="15:00", score=65, rating="CAUTION", wind_mph=15.0, temp_f=70.0, uv=3.0, precip_pct=5),
-            ForecastBlock(start="15:00", end="18:00", score=85, rating="GO", wind_mph=8.0, temp_f=74.0, uv=4.0, precip_pct=0),
+            ForecastBlock(
+                start="12:00", end="15:00", score=65, rating="CAUTION", wind_mph=15.0, temp_f=70.0, uv=3.0, precip_pct=5
+            ),
+            ForecastBlock(
+                start="15:00", end="18:00", score=85, rating="GO", wind_mph=8.0, temp_f=74.0, uv=4.0, precip_pct=0
+            ),
         ]
         coordinator = _make_coordinator(_make_conditions(forecast_blocks=blocks))
         desc = next(d for d in SENSOR_DESCRIPTIONS if d.key == "forecast_3hr")
