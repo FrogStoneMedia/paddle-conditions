@@ -8,10 +8,7 @@ jobs:
   lint:
     runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.14"
+      - uses: actions/checkout@v6
       - run: pip install ruff
       - run: ruff check .
       - run: ruff format --check .
