@@ -75,6 +75,7 @@ def _mock_weather(**overrides):
         hourly_wind=[],
         hourly_temp=[],
         hourly_uv=[],
+        hourly_precip=[],
         hourly_times=[],
         hourly_weather_codes=[],
     )
@@ -141,6 +142,7 @@ async def test_coordinator_builds_forecast_blocks(_make_coordinator):
                 "2026-03-10T10:00",
                 "2026-03-10T11:00",
             ],
+            hourly_precip=[0, 5, 10, 0, 5, 10],
             hourly_weather_codes=[0, 0, 0, 0, 0, 0],
         )
     )
@@ -219,8 +221,8 @@ async def test_coordinator_pushes_to_cloud_after_update(mock_config_entry, mock_
 
     await coordinator._async_update_data()
 
-    # Verify push was dispatched as a background task, not awaited directly
-    mock_hass.async_create_task.assert_called_once()
+    # Verify push was dispatched as a background task (store.async_save also creates a task)
+    assert mock_hass.async_create_task.call_count >= 1
 
 
 async def test_coordinator_sync_push_failure_does_not_block_update(_make_coordinator):

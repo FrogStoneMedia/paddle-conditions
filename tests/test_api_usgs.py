@@ -2,11 +2,12 @@
 
 import json
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from custom_components.paddle_conditions.api.usgs import USGSClient, USGSData
+
+from .conftest import mock_get_json
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -16,15 +17,8 @@ def usgs_response():
     return json.loads((FIXTURES / "usgs_water_temp.json").read_text())
 
 
-def _mock_get(data):
-    resp = MagicMock()
-    resp.json = AsyncMock(return_value=data)
-    resp.raise_for_status = MagicMock()
-    return AsyncMock(return_value=resp)
-
-
 async def test_fetch_usgs_water_temp(mock_session, usgs_response):
-    mock_session.get = _mock_get(usgs_response)
+    mock_session.get = mock_get_json(usgs_response)
 
     client = USGSClient(mock_session)
     data = await client.fetch(site_id="11446500")
@@ -36,7 +30,7 @@ async def test_fetch_usgs_water_temp(mock_session, usgs_response):
 
 
 async def test_fetch_usgs_streamflow(mock_session, usgs_response):
-    mock_session.get = _mock_get(usgs_response)
+    mock_session.get = mock_get_json(usgs_response)
 
     client = USGSClient(mock_session)
     data = await client.fetch(site_id="11446500")
@@ -44,7 +38,7 @@ async def test_fetch_usgs_streamflow(mock_session, usgs_response):
 
 
 async def test_fetch_usgs_no_data(mock_session):
-    mock_session.get = _mock_get({"value": {"timeSeries": []}})
+    mock_session.get = mock_get_json({"value": {"timeSeries": []}})
 
     client = USGSClient(mock_session)
     data = await client.fetch(site_id="99999999")
@@ -64,7 +58,7 @@ async def test_fetch_usgs_malformed_value(mock_session):
             ]
         }
     }
-    mock_session.get = _mock_get(malformed)
+    mock_session.get = mock_get_json(malformed)
 
     client = USGSClient(mock_session)
     data = await client.fetch(site_id="11446500")
