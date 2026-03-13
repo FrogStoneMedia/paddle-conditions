@@ -2,11 +2,13 @@
 
 import json
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from custom_components.paddle_conditions.api.base import APIError
 from custom_components.paddle_conditions.api.noaa import NOAAClient, NOAAData
+
+from .conftest import mock_get_error, mock_get_json
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -16,15 +18,8 @@ def coops_response():
     return json.loads((FIXTURES / "noaa_coops_tides.json").read_text())
 
 
-def _mock_get(data):
-    resp = MagicMock()
-    resp.json = AsyncMock(return_value=data)
-    resp.raise_for_status = MagicMock()
-    return AsyncMock(return_value=resp)
-
-
 async def test_fetch_tides(mock_session, coops_response):
-    mock_session.get = _mock_get(coops_response)
+    mock_session.get = mock_get_json(coops_response)
 
     client = NOAAClient(mock_session)
     data = await client.fetch_tides(station_id="9414290")
@@ -36,7 +31,7 @@ async def test_fetch_tides(mock_session, coops_response):
 
 
 async def test_fetch_tides_empty(mock_session):
-    mock_session.get = _mock_get({"predictions": []})
+    mock_session.get = mock_get_json({"predictions": []})
 
     client = NOAAClient(mock_session)
     data = await client.fetch_tides(station_id="9414290")
@@ -51,7 +46,7 @@ async def test_fetch_tides_malformed_entry(mock_session):
             {"t": "2026-03-10 18:00", "v": "4.5", "type": "L"},
         ]
     }
-    mock_session.get = _mock_get(malformed)
+    mock_session.get = mock_get_json(malformed)
 
     client = NOAAClient(mock_session)
     data = await client.fetch_tides(station_id="9414290")
@@ -60,15 +55,7 @@ async def test_fetch_tides_malformed_entry(mock_session):
 
 async def test_fetch_tides_http_error(mock_session):
     """HTTP errors should raise APIError."""
-    from aiohttp import ClientResponseError
-
-    from custom_components.paddle_conditions.api.base import APIError
-
-    resp = MagicMock()
-    resp.raise_for_status = MagicMock(
-        side_effect=ClientResponseError(request_info=MagicMock(), history=(), status=503, message="Unavailable")
-    )
-    mock_session.get = AsyncMock(return_value=resp)
+    mock_session.get = mock_get_error(503, "Unavailable")
 
     client = NOAAClient(mock_session)
     with pytest.raises(APIError):
@@ -77,7 +64,7 @@ async def test_fetch_tides_http_error(mock_session):
 
 async def test_fetch_water_temp_success(mock_session):
     water_temp_response = {"data": [{"t": "2026-03-10 12:00", "v": "55.2"}]}
-    mock_session.get = _mock_get(water_temp_response)
+    mock_session.get = mock_get_json(water_temp_response)
 
     client = NOAAClient(mock_session)
     temp = await client.fetch_water_temp(station_id="9414290")
@@ -86,7 +73,7 @@ async def test_fetch_water_temp_success(mock_session):
 
 
 async def test_fetch_water_temp_no_data(mock_session):
-    mock_session.get = _mock_get({"data": []})
+    mock_session.get = mock_get_json({"data": []})
 
     client = NOAAClient(mock_session)
     temp = await client.fetch_water_temp(station_id="9414290")

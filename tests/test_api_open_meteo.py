@@ -2,16 +2,18 @@
 
 import json
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from custom_components.paddle_conditions.api.base import APIError
 from custom_components.paddle_conditions.api.open_meteo import (
     AQIData,
     OpenMeteoAQIClient,
     OpenMeteoWeatherClient,
     WeatherData,
 )
+
+from .conftest import mock_get_error, mock_get_json
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -26,19 +28,11 @@ def aqi_response():
     return json.loads((FIXTURES / "open_meteo_aqi.json").read_text())
 
 
-def _mock_get(data):
-    """Create a mock session.get that returns JSON data."""
-    resp = MagicMock()
-    resp.json = AsyncMock(return_value=data)
-    resp.raise_for_status = MagicMock()
-    return AsyncMock(return_value=resp)
-
-
 # --- Weather client tests ---
 
 
 async def test_fetch_weather_success(mock_session, weather_response):
-    mock_session.get = _mock_get(weather_response)
+    mock_session.get = mock_get_json(weather_response)
 
     client = OpenMeteoWeatherClient(mock_session)
     data = await client.fetch(latitude=38.637, longitude=-121.227)
@@ -54,7 +48,7 @@ async def test_fetch_weather_success(mock_session, weather_response):
 
 async def test_fetch_weather_visibility_conversion(mock_session, weather_response):
     """Visibility comes in meters, must be converted to miles."""
-    mock_session.get = _mock_get(weather_response)
+    mock_session.get = mock_get_json(weather_response)
 
     client = OpenMeteoWeatherClient(mock_session)
     data = await client.fetch(latitude=38.637, longitude=-121.227)
@@ -84,7 +78,7 @@ async def test_fetch_weather_thunderstorm_detection(mock_session):
             "weather_code": [],
         },
     }
-    mock_session.get = _mock_get(thunderstorm_response)
+    mock_session.get = mock_get_json(thunderstorm_response)
 
     client = OpenMeteoWeatherClient(mock_session)
     data = await client.fetch(latitude=38.637, longitude=-121.227)
@@ -93,7 +87,7 @@ async def test_fetch_weather_thunderstorm_detection(mock_session):
 
 async def test_fetch_weather_no_thunderstorm(mock_session, weather_response):
     """Non-thunderstorm weather codes should set has_thunderstorm=False."""
-    mock_session.get = _mock_get(weather_response)
+    mock_session.get = mock_get_json(weather_response)
 
     client = OpenMeteoWeatherClient(mock_session)
     data = await client.fetch(latitude=38.637, longitude=-121.227)
@@ -102,7 +96,7 @@ async def test_fetch_weather_no_thunderstorm(mock_session, weather_response):
 
 async def test_fetch_weather_hourly_data(mock_session, weather_response):
     """Hourly forecast arrays should be parsed."""
-    mock_session.get = _mock_get(weather_response)
+    mock_session.get = mock_get_json(weather_response)
 
     client = OpenMeteoWeatherClient(mock_session)
     data = await client.fetch(latitude=38.637, longitude=-121.227)
@@ -114,15 +108,7 @@ async def test_fetch_weather_hourly_data(mock_session, weather_response):
 
 async def test_fetch_weather_api_error(mock_session):
     """HTTP errors should raise APIError."""
-    from aiohttp import ClientResponseError
-
-    from custom_components.paddle_conditions.api.base import APIError
-
-    resp = MagicMock()
-    resp.raise_for_status = MagicMock(
-        side_effect=ClientResponseError(request_info=MagicMock(), history=(), status=500, message="Server Error")
-    )
-    mock_session.get = AsyncMock(return_value=resp)
+    mock_session.get = mock_get_error(500, "Server Error")
 
     client = OpenMeteoWeatherClient(mock_session)
     client._retries = 0
@@ -134,7 +120,7 @@ async def test_fetch_weather_api_error(mock_session):
 
 
 async def test_fetch_aqi_success(mock_session, aqi_response):
-    mock_session.get = _mock_get(aqi_response)
+    mock_session.get = mock_get_json(aqi_response)
 
     client = OpenMeteoAQIClient(mock_session)
     data = await client.fetch(latitude=38.637, longitude=-121.227)
@@ -148,7 +134,7 @@ async def test_fetch_aqi_success(mock_session, aqi_response):
 
 async def test_fetch_aqi_missing_fields(mock_session):
     """Missing fields should be None, not crash."""
-    mock_session.get = _mock_get({"current": {"us_aqi": 50}})
+    mock_session.get = mock_get_json({"current": {"us_aqi": 50}})
 
     client = OpenMeteoAQIClient(mock_session)
     data = await client.fetch(latitude=38.637, longitude=-121.227)
