@@ -92,6 +92,11 @@ def test_paddle_conditions_creation():
         tide_factor=None,
         condition_text="Partly cloudy",
         forecast_blocks=[],
+        hourly_times=[],
+        hourly_wind=[],
+        hourly_temp=[],
+        hourly_uv=[],
+        hourly_precip=[],
     )
     assert conditions.wind_speed == 8.0
     assert conditions.water_temp == 68.0
@@ -108,6 +113,7 @@ def test_forecast_block_creation():
         wind_mph=8.0,
         temp_f=78.0,
         uv=5.2,
+        precip_pct=0,
     )
     assert block.score == 72
     assert block.rating == "GO"
@@ -131,6 +137,7 @@ def test_paddle_conditions_with_forecast():
         wind_mph=8.0,
         temp_f=78.0,
         uv=5.2,
+        precip_pct=0,
     )
     conditions = PaddleConditions(
         score=score,
@@ -149,6 +156,11 @@ def test_paddle_conditions_with_forecast():
         tide_factor=None,
         condition_text=None,
         forecast_blocks=[block],
+        hourly_times=[],
+        hourly_wind=[],
+        hourly_temp=[],
+        hourly_uv=[],
+        hourly_precip=[],
     )
     assert len(conditions.forecast_blocks) == 1
     assert conditions.forecast_blocks[0].score == 72
