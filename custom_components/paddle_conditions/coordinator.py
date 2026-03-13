@@ -99,7 +99,7 @@ class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):  # type: ignor
             # The coordinator will retry on its normal interval.
             try:
                 await super().async_config_entry_first_refresh()
-            except Exception:  # noqa: BLE001
+            except Exception:
                 LOGGER.warning(
                     "API refresh failed for %s on startup, using cached data",
                     self.location_name,

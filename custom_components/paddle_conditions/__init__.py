@@ -71,7 +71,7 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
                 await resources.async_create_item(
                     {"res_type": "module", "url": versioned}
                 )
-    except Exception:  # noqa: BLE001
+    except Exception:
         # Lovelace resources API unavailable (YAML mode, etc.) — fall back
         from homeassistant.components.frontend import add_extra_js_url
 
