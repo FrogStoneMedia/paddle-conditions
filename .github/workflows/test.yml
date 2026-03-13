@@ -2,6 +2,7 @@ name: Tests
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 jobs:
@@ -9,5 +10,9 @@ jobs:
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+          cache: 'pip'
       - run: pip install -r requirements_test.txt
       - run: pytest tests/ --cov=custom_components/paddle_conditions --cov-report=xml -v
