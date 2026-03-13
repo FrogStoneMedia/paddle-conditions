@@ -31,9 +31,7 @@ class BaseAPIClient:
         self._timeout = timeout
         self._retries = retries
 
-    async def _request(
-        self, url: str, params: dict[str, Any] | None, response_method: str
-    ) -> Any:
+    async def _request(self, url: str, params: dict[str, Any] | None, response_method: str) -> Any:
         """Make a GET request with retry on 5xx, reading the body inside the timeout."""
         last_err: Exception | None = None
         for attempt in range(1 + self._retries):
