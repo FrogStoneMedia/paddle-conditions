@@ -62,15 +62,11 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
             for item in existing:
                 if url in str(item.get("url", "")):
                     if item["url"] != versioned:
-                        await resources.async_update_item(
-                            item["id"], {"res_type": "module", "url": versioned}
-                        )
+                        await resources.async_update_item(item["id"], {"res_type": "module", "url": versioned})
                     found = True
                     break
             if not found:
-                await resources.async_create_item(
-                    {"res_type": "module", "url": versioned}
-                )
+                await resources.async_create_item({"res_type": "module", "url": versioned})
     except Exception:
         # Lovelace resources API unavailable (YAML mode, etc.) — fall back
         from homeassistant.components.frontend import add_extra_js_url
@@ -117,9 +113,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: PaddleConfigEntry) -> bo
 
     for (subentry_id, coordinator), result in zip(pending, results, strict=True):
         if isinstance(result, Exception):
-            LOGGER.warning(
-                "First refresh failed for %s: %s", coordinator.location_name, result
-            )
+            LOGGER.warning("First refresh failed for %s: %s", coordinator.location_name, result)
         coordinators[subentry_id] = coordinator
 
     entry.runtime_data = coordinators
