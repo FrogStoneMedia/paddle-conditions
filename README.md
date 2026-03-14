@@ -6,6 +6,12 @@
 
 Paddle Conditions is a [Home Assistant](https://www.home-assistant.io/) custom integration that fetches weather, water, and air quality data for your paddle spots, scores each one **Go / Caution / No-go**, and shows a 24-hour forecast so you can pick the best window. All data comes from free public APIs. No accounts, no API keys, no subscriptions.
 
+<p align="center">
+  <img src="docs/images/dashboard-mobile.png" alt="Paddle Conditions dashboard showing score badges and location card" width="300"/>
+  &nbsp;&nbsp;
+  <img src="docs/images/detail-overlay.png" alt="Detail overlay with paddle score, wind, and temperature charts" width="300"/>
+</p>
+
 I built this because I was tired of checking four different apps before every paddle. Wind on one site, AQI on another, water temp somewhere else, streamflow on a USGS page that looks like it was designed in 1998. I paddle year-round on spots like [Lake Natoma](https://www.mklibrary.com/lake-natoma-california/), [Sand Harbor at Tahoe](https://www.mklibrary.com/sand-harbor-state-park-paddle-boarding/), and [New Bullards Bar Reservoir](https://www.mklibrary.com/new-bullards-bar-reservoir-california/), and I do [distance sessions](https://www.mklibrary.com/why-you-bonk-on-long-paddle-board-sessions/) where conditions at launch can be completely different from conditions at mile 5. I needed one place that pulled it all together and told me: should I go, or not?
 
 ---
@@ -48,6 +54,12 @@ I built this because I was tired of checking four different apps before every pa
 Custom Lovelace cards ship with the integration. No extra HACS card downloads needed.
 - **`paddle-score-card`**: all-in-one card with hero score, Go/Caution/No-go rating, best time to paddle, factor grid with tap-to-expand hourly forecasts, and 3-hour forecast timeline
 - **`paddle-spots-card`**: multi-location comparison with color-coded score badges for quick spot selection
+
+<p align="center">
+  <img src="docs/images/forecast-cards.png" alt="Forecast timeline and multi-location view" width="300"/>
+  &nbsp;&nbsp;
+  <img src="docs/images/tahoe-overlay.png" alt="Lake Tahoe detail overlay with water temperature chart" width="300"/>
+</p>
 
 ### Caching
 API data is cached to disk after each successful fetch. On restart, cached data loads immediately so your dashboard renders before APIs respond. If a weather API call fails, the integration falls back to cached data instead of going unavailable.
@@ -198,6 +210,7 @@ The integration bundles two custom Lovelace cards and a service action that gene
 - Best time to paddle (filtered to daylight hours, at least 2 hours before sunset)
 - Factor grid (wind, AQI, temperature, UV, visibility, precipitation) with score bars
 - Tap any factor tile to expand hourly forecasts (sunrise-1h to sunset+1h)
+- Tap the score header to open a detail overlay with stacked SVG line charts for paddle score, wind speed/gusts, air/water temperature, UV index, and precipitation — all on a sunrise-to-sunset timeline
 - 3-hour forecast timeline with per-block scores, wind, and temperature
 
 **`paddle-spots-card`** — Multi-location comparison card with color-coded score badges. Useful when you have several spots and want to see at a glance which one is best today.
