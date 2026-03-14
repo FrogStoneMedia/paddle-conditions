@@ -245,3 +245,61 @@ class TestPaddleSensor:
         assert "Open-Meteo" in sensor._attr_attribution
         assert "USGS" in sensor._attr_attribution
         assert "NOAA" in sensor._attr_attribution
+
+    def test_native_value_none_when_no_data(self):
+        """Sensor returns None when coordinator has no data."""
+        coordinator = _make_coordinator()
+        coordinator.data = None
+        desc = next(d for d in SENSOR_DESCRIPTIONS if d.key == "score")
+        sensor = PaddleSensor(coordinator, "sub_001", desc)
+        assert sensor.native_value is None
+
+    def test_extra_attrs_none_when_no_data(self):
+        """Extra attrs returns None when coordinator has no data."""
+        coordinator = _make_coordinator()
+        coordinator.data = None
+        desc = next(d for d in SENSOR_DESCRIPTIONS if d.key == "score")
+        sensor = PaddleSensor(coordinator, "sub_001", desc)
+        assert sensor.extra_state_attributes is None
+
+
+class TestEntityCategories:
+    """Tests for entity category and disabled-by-default assignments."""
+
+    def test_streamflow_is_diagnostic(self):
+        """Streamflow sensor should be categorized as diagnostic."""
+        from homeassistant.const import EntityCategory
+
+        desc = next(d for d in SENSOR_DESCRIPTIONS if d.key == "streamflow")
+        assert desc.entity_category == EntityCategory.DIAGNOSTIC
+
+    def test_condition_is_diagnostic(self):
+        """Condition sensor should be categorized as diagnostic."""
+        from homeassistant.const import EntityCategory
+
+        desc = next(d for d in SENSOR_DESCRIPTIONS if d.key == "condition")
+        assert desc.entity_category == EntityCategory.DIAGNOSTIC
+
+    def test_forecast_is_diagnostic(self):
+        """Forecast sensor should be categorized as diagnostic."""
+        from homeassistant.const import EntityCategory
+
+        desc = next(d for d in SENSOR_DESCRIPTIONS if d.key == "forecast_3hr")
+        assert desc.entity_category == EntityCategory.DIAGNOSTIC
+
+    def test_streamflow_disabled_by_default(self):
+        """Streamflow sensor should be disabled by default."""
+        desc = next(d for d in SENSOR_DESCRIPTIONS if d.key == "streamflow")
+        assert desc.entity_registry_enabled_default is False
+
+    def test_forecast_disabled_by_default(self):
+        """Forecast sensor should be disabled by default."""
+        desc = next(d for d in SENSOR_DESCRIPTIONS if d.key == "forecast_3hr")
+        assert desc.entity_registry_enabled_default is False
+
+    def test_primary_sensors_have_no_category(self):
+        """Primary sensors (score, wind, temp, etc.) should not have a category."""
+        primary_keys = {"score", "wind_speed", "wind_gusts", "wind_direction", "air_temp", "water_temp", "uv_index", "aqi", "visibility", "precipitation"}
+        for desc in SENSOR_DESCRIPTIONS:
+            if desc.key in primary_keys:
+                assert desc.entity_category is None, f"{desc.key} should not have entity_category"

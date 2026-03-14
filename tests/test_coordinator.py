@@ -235,3 +235,60 @@ async def test_coordinator_sync_push_failure_does_not_block_update(_make_coordin
     # Even though sync is disabled (no URL/token), update should succeed
     data = await coordinator._async_update_data()
     assert isinstance(data, PaddleConditions)
+
+
+async def test_coordinator_saves_cache_after_update(_make_coordinator, mock_hass):
+    """Coordinator persists data to Store after successful update."""
+    mock_hass.async_create_task = MagicMock()
+    coordinator = _make_coordinator()
+
+    coordinator.weather_client.fetch = AsyncMock(return_value=_mock_weather())
+    coordinator.aqi_client.fetch = AsyncMock(return_value=MagicMock(aqi=42))
+    coordinator.usgs_client.fetch = AsyncMock(return_value=MagicMock(water_temp_f=None, streamflow_cfs=None))
+    coordinator._store.async_save = AsyncMock()
+
+    data = await coordinator._async_update_data()
+
+    # async_create_task should be called with store.async_save
+    assert mock_hass.async_create_task.called
+    assert isinstance(data, PaddleConditions)
+
+
+async def test_coordinator_empty_hourly_produces_no_blocks(_make_coordinator):
+    """Empty hourly data should produce zero forecast blocks."""
+    coordinator = _make_coordinator()
+
+    coordinator.weather_client.fetch = AsyncMock(
+        return_value=_mock_weather(
+            hourly_wind=[],
+            hourly_temp=[],
+            hourly_uv=[],
+            hourly_times=[],
+            hourly_precip=[],
+            hourly_weather_codes=[],
+        )
+    )
+    coordinator.aqi_client.fetch = AsyncMock(return_value=MagicMock(aqi=30))
+    coordinator.usgs_client.fetch = AsyncMock(return_value=MagicMock(water_temp_f=None, streamflow_cfs=None))
+
+    data = await coordinator._async_update_data()
+    assert data.forecast_blocks == []
+
+
+async def test_coordinator_weather_failure_uses_cache(_make_coordinator):
+    """Weather failure with cached data should return cached data."""
+    coordinator = _make_coordinator()
+
+    # Set up cached data
+    coordinator.weather_client.fetch = AsyncMock(return_value=_mock_weather())
+    coordinator.aqi_client.fetch = AsyncMock(return_value=MagicMock(aqi=42))
+    coordinator.usgs_client.fetch = AsyncMock(return_value=MagicMock(water_temp_f=None, streamflow_cfs=None))
+
+    cached_data = await coordinator._async_update_data()
+    coordinator.data = cached_data
+
+    # Now make weather fail
+    coordinator.weather_client.fetch = AsyncMock(side_effect=Exception("API down"))
+
+    data = await coordinator._async_update_data()
+    assert data is cached_data  # Should return cached data
