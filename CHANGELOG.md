@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.1.0
+
+### Added
+- Entity categories: streamflow, condition, and forecast sensors marked as diagnostic
+- Disabled by default: streamflow and forecast sensors (enable in entity settings if needed)
+- Icons: custom MDI icons for all 13 sensors and the dashboard service
+- Config flow validation: weather API connectivity tested when adding/editing locations
+- Quality scale tracking: quality_scale.yaml documents compliance with all 51 HA rules
+- Comprehensive documentation: data updates, sensors reference, automation examples, troubleshooting
+
+### Fixed
+- Removed duplicate comment in frontend registration code
+
 ## 1.0.6
 
 ### Added
