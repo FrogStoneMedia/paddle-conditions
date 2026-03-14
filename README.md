@@ -61,6 +61,14 @@ Custom Lovelace cards ship with the integration. No extra HACS card downloads ne
   <img src="docs/images/tahoe-overlay.png" alt="Lake Tahoe detail overlay with water temperature chart" width="300"/>
 </p>
 
+### Accessibility
+All bundled cards follow WCAG 2.1 AA guidelines:
+- **Keyboard navigation** on every interactive element (Enter/Space to activate, Escape to close overlays)
+- **ARIA labels and roles** for screen readers, including progress bars, toggle states, and dialog overlays
+- **Focus indicators** visible on all focusable elements
+- **Respects `prefers-reduced-motion`** to disable animations for users with vestibular sensitivities
+- **Color contrast** meets AA ratios. Ratings include text labels alongside color so no information is conveyed by color alone.
+
 ### Caching
 API data is cached to disk after each successful fetch. On restart, cached data loads immediately so your dashboard renders before APIs respond. If a weather API call fails, the integration falls back to cached data instead of going unavailable.
 
