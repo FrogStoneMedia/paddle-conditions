@@ -1111,16 +1111,19 @@ class PaddleScoreCard extends HTMLElement {
       }
       .overlay-content {
         position: absolute;
-        top: 0; left: 0; right: 0; bottom: 0;
+        top: 0; bottom: 0;
+        left: 50%;
+        transform: translateX(-50%) translateY(40px);
+        width: 100%;
+        max-width: 500px;
         overflow-y: auto;
         background: #1e1e2e;
         padding: 16px;
         font-family: -apple-system, BlinkMacSystemFont, sans-serif;
         color: #ccc;
-        transform: translateY(40px);
         transition: transform 0.3s ease;
       }
-      .overlay-visible .overlay-content { transform: translateY(0); }
+      .overlay-visible .overlay-content { transform: translateX(-50%) translateY(0); }
       .ov-topbar {
         display: flex;
         justify-content: space-between;
