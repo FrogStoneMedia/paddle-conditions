@@ -15,11 +15,14 @@ from homeassistant.core import (
     ServiceResponse,
     SupportsResponse,
 )
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 
 from .const import DOMAIN, LOGGER, SUBENTRY_TYPE_LOCATION
 from .coordinator import PaddleConfigEntry, PaddleCoordinator
 from .dashboard_generator import generate_dashboard
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 
