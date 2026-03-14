@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.1.0
+## 1.0.0
 
 ### Added
 - Entity categories: streamflow, condition, and forecast sensors marked as diagnostic
@@ -9,11 +9,13 @@
 - Config flow validation: weather API connectivity tested when adding/editing locations
 - Quality scale tracking: quality_scale.yaml documents compliance with all 51 HA rules
 - Comprehensive documentation: data updates, sensors reference, automation examples, troubleshooting
+- Overlay centering on wide screens with max-width constraint
 
 ### Fixed
 - Removed duplicate comment in frontend registration code
+- CI: use system Python on self-hosted runners, run HACS validation only on tags
 
-## 1.0.6
+## 0.7.0
 
 ### Added
 - Detail overlay: tap the score hero to see full-screen stacked line charts for paddle score, wind, temperature, UV index, and precipitation
@@ -26,7 +28,7 @@
 - Overlay header layout: centered score with separated close button (no overlap)
 - Disabled cache_headers on static paths to prevent stale JS in mobile WebViews
 
-## 1.0.5
+## 0.6.0
 
 ### Fixed
 - Sensor crash when coordinator.data is None (added None guards)
@@ -38,35 +40,35 @@
 - Zero-duration forecast blocks no longer generated
 - Corrected scoring docstring and documentation arithmetic examples
 
-## 1.0.4
+## 0.5.0
 
 ### Fixed
 - Startup freeze: parallelize coordinator refresh with asyncio.gather
 - Use cache fallback when first refresh fails
 - Hourly data timezone: use local time instead of UTC
 
-## 1.0.3
+## 0.4.0
 
 ### Added
 - Dashboard cards: paddle-score-card and paddle-spots-card
 - Service action for generating dashboard YAML
 - Subentry reconfigure flow for editing existing locations
 
-## 1.0.2
+## 0.3.0
 
 ### Added
 - 3-hour forecast blocks with per-block scoring
 - Hourly data arrays (wind, temp, UV, precipitation)
 - Factor drill-down in score card
 
-## 1.0.1
+## 0.2.0
 
 ### Added
 - USGS water temperature and streamflow support
 - NOAA tide and coastal water temperature
 - Multiple paddler profiles (Recreational, Racing, Family)
 
-## 1.0.0
+## 0.1.0
 
 ### Added
 - Initial release
