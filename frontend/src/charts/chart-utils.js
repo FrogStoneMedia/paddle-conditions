@@ -93,16 +93,16 @@ export const CHART_METRICS = {
 };
 
 export function getThresholdGridColor(value) {
-  if (value === 70) return "rgba(76,175,80,0.3)";
-  if (value === 40) return "rgba(255,152,0,0.3)";
-  return "rgba(0,0,0,0.05)";
+  if (value === 70) return "rgba(76,175,80,0.45)";
+  if (value === 40) return "rgba(255,152,0,0.45)";
+  return "rgba(0,0,0,0.08)";
 }
 
 export function getZoneBackgrounds() {
   return [
-    { from: 70, to: 100, color: "rgba(76,175,80,0.06)" },
-    { from: 40, to: 70, color: "rgba(255,152,0,0.06)" },
-    { from: 0, to: 40, color: "rgba(244,67,54,0.06)" },
+    { from: 70, to: 100, color: "rgba(76,175,80,0.10)" },
+    { from: 40, to: 70, color: "rgba(255,152,0,0.10)" },
+    { from: 0, to: 40, color: "rgba(244,67,54,0.10)" },
   ];
 }
 

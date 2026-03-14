@@ -1,4 +1,4 @@
-import { colorForRating, formatScore, fireMoreInfo } from "../utils.js";
+import { colorForRating, formatScore, fireMoreInfo, labelForRating, makeInteractive } from "../utils.js";
 import { CARD_STYLES } from "../styles/theme.js";
 
 const STYLES = `
@@ -129,6 +129,8 @@ class PaddleChipsCard extends HTMLElement {
 
     const row = document.createElement("div");
     row.className = "chips-row";
+    row.setAttribute("role", "list");
+    row.setAttribute("aria-label", "Paddle spots");
 
     const entities = this._config.entities;
 
@@ -142,17 +144,20 @@ class PaddleChipsCard extends HTMLElement {
       const color = colorForRating(rating);
       const name = (attrs.friendly_name || entityId).trim();
       const isActive = index === 0;
+      const ratingText = labelForRating(rating);
 
       const chip = document.createElement("div");
       chip.className = isActive ? "chip active" : "chip";
+      chip.setAttribute("role", "listitem");
       if (isActive) {
         chip.style.borderColor = color;
       }
-      chip.addEventListener("click", () => fireMoreInfo(this, entityId));
+      makeInteractive(chip, () => fireMoreInfo(this, entityId), `${name}: ${formatScore(isNaN(score) ? null : score)}, ${ratingText}`);
 
       const dot = document.createElement("div");
       dot.className = "status-dot";
       dot.style.background = color;
+      dot.setAttribute("aria-hidden", "true");
 
       const nameEl = document.createElement("span");
       nameEl.className = "chip-name";
@@ -173,7 +178,7 @@ class PaddleChipsCard extends HTMLElement {
       refreshIcon.setAttribute("icon", "mdi:refresh");
       refreshChip.appendChild(refreshIcon);
 
-      refreshChip.addEventListener("click", () => {
+      const refreshHandler = () => {
         if (this._refreshPending) return;
         this._refreshPending = true;
         this._lastStates = null; // force re-render
@@ -185,7 +190,9 @@ class PaddleChipsCard extends HTMLElement {
           this._lastStates = null; // force re-render
           this._render();
         });
-      });
+      };
+      makeInteractive(refreshChip, refreshHandler, this._refreshPending ? "Refreshing data" : "Refresh data");
+      if (this._refreshPending) refreshChip.setAttribute("aria-busy", "true");
 
       row.appendChild(refreshChip);
     }

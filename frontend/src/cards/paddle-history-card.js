@@ -39,8 +39,8 @@ const STYLES = `
   }
   .range-chip.active {
     border-color: #4CAF50;
-    background: rgba(76,175,80,0.15);
-    color: #4CAF50;
+    background: rgba(76,175,80,0.18);
+    color: #2E7D32;
   }
   .chart-container {
     position: relative;
@@ -257,11 +257,24 @@ class PaddleHistoryCard extends HTMLElement {
 
       const rangeChips = document.createElement("div");
       rangeChips.className = "range-chips";
+      rangeChips.setAttribute("role", "group");
+      rangeChips.setAttribute("aria-label", "Time range");
       for (const [key, cfg] of Object.entries(RANGE_CONFIG)) {
+        const isActive = this._range === key;
         const chip = document.createElement("span");
-        chip.className = `range-chip ${this._range === key ? "active" : ""}`;
+        chip.className = `range-chip ${isActive ? "active" : ""}`;
         chip.textContent = cfg.label;
+        chip.setAttribute("role", "button");
+        chip.setAttribute("tabindex", "0");
+        chip.setAttribute("aria-pressed", String(isActive));
+        chip.setAttribute("aria-label", `Show ${cfg.days} day history`);
         chip.addEventListener("click", () => this._setRange(key));
+        chip.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            this._setRange(key);
+          }
+        });
         rangeChips.appendChild(chip);
       }
       header.appendChild(rangeChips);
@@ -270,6 +283,8 @@ class PaddleHistoryCard extends HTMLElement {
       // Chart container with skeleton placeholder
       const container = document.createElement("div");
       container.className = "chart-container";
+      container.setAttribute("role", "img");
+      container.setAttribute("aria-label", `Score history over ${RANGE_CONFIG[this._range].days} days`);
       const skeleton = document.createElement("div");
       skeleton.className = "chart-skeleton";
       container.appendChild(skeleton);
