@@ -49,9 +49,6 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
     # Register through the Lovelace resources collection so the companion
     # app loads the cards reliably (add_extra_js_url only injects into the
     # HTML page and isn't re-executed on app refresh).
-    # Register through the Lovelace resources collection so the companion
-    # app loads the cards reliably (add_extra_js_url only injects into the
-    # HTML page and isn't re-executed on app refresh).
     try:
         resources = hass.data["lovelace"].resources
         existing = resources.async_items()

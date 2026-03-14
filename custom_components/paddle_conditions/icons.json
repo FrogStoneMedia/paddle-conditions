@@ -1,0 +1,22 @@
+{
+  "entity": {
+    "sensor": {
+      "paddle_score": { "default": "mdi:scoreboard-outline" },
+      "wind_speed": { "default": "mdi:weather-windy" },
+      "wind_gusts": { "default": "mdi:weather-windy-variant" },
+      "wind_direction": { "default": "mdi:compass-outline" },
+      "air_temp": { "default": "mdi:thermometer" },
+      "water_temp": { "default": "mdi:thermometer-water" },
+      "uv_index": { "default": "mdi:white-balance-sunny" },
+      "aqi": { "default": "mdi:air-filter" },
+      "visibility": { "default": "mdi:eye-outline" },
+      "precipitation": { "default": "mdi:weather-rainy" },
+      "streamflow": { "default": "mdi:waves" },
+      "condition": { "default": "mdi:cloud-outline" },
+      "forecast_3hr": { "default": "mdi:chart-timeline-variant" }
+    }
+  },
+  "services": {
+    "get_dashboard_yaml": "mdi:view-dashboard-outline"
+  }
+}

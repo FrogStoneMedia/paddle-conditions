@@ -12,7 +12,7 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.const import PERCENTAGE, UnitOfLength, UnitOfSpeed, UnitOfTemperature
+from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfLength, UnitOfSpeed, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -124,16 +124,21 @@ SENSOR_DESCRIPTIONS: tuple[PaddleSensorEntityDescription, ...] = (
         translation_key="streamflow",
         native_unit_of_measurement="CFS",
         state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
         value_fn=lambda data: data.streamflow_cfs,
     ),
     PaddleSensorEntityDescription(
         key="condition",
         translation_key="condition",
+        entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda data: data.condition_text,
     ),
     PaddleSensorEntityDescription(
         key="forecast_3hr",
         translation_key="forecast_3hr",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
         value_fn=lambda data: data.forecast_blocks[0].score if data.forecast_blocks else None,
         extra_attrs_fn=lambda data: {
             "blocks": [
