@@ -299,7 +299,18 @@ class TestEntityCategories:
 
     def test_primary_sensors_have_no_category(self):
         """Primary sensors (score, wind, temp, etc.) should not have a category."""
-        primary_keys = {"score", "wind_speed", "wind_gusts", "wind_direction", "air_temp", "water_temp", "uv_index", "aqi", "visibility", "precipitation"}
+        primary_keys = {
+            "score",
+            "wind_speed",
+            "wind_gusts",
+            "wind_direction",
+            "air_temp",
+            "water_temp",
+            "uv_index",
+            "aqi",
+            "visibility",
+            "precipitation",
+        }
         for desc in SENSOR_DESCRIPTIONS:
             if desc.key in primary_keys:
                 assert desc.entity_category is None, f"{desc.key} should not have entity_category"

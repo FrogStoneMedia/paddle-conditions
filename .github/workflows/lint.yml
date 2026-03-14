@@ -10,10 +10,13 @@ jobs:
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-python@v5
+
+      - uses: actions/cache@v4
         with:
-          python-version: '3.x'
-          cache: 'pip'
-      - run: pip install ruff
-      - run: ruff check .
-      - run: ruff format --check .
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-lint
+          restore-keys: ${{ runner.os }}-pip-lint
+
+      - run: python3 -m pip install ruff
+      - run: python3 -m ruff check .
+      - run: python3 -m ruff format --check .
