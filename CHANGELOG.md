@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.0
+## 0.9.0
 
 ### Added
 - Entity categories: streamflow, condition, and forecast sensors marked as diagnostic
