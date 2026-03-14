@@ -15,6 +15,9 @@
       "initiate_flow": {
         "user": "Add paddle location"
       },
+      "error": {
+        "cannot_connect": "Could not connect to weather service. Check coordinates and try again."
+      },
       "step": {
         "user": {
           "title": "Add Paddle Location",

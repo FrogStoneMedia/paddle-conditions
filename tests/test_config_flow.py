@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
@@ -10,6 +12,17 @@ from homeassistant.data_entry_flow import FlowResultType
 from custom_components.paddle_conditions.const import DOMAIN
 
 pytestmark = pytest.mark.usefixtures("enable_custom_integrations")
+
+WEATHER_CLIENT_PATH = "custom_components.paddle_conditions.api.open_meteo.OpenMeteoWeatherClient"
+SESSION_PATH = "homeassistant.helpers.aiohttp_client.async_get_clientsession"
+FRONTEND_PATH = "custom_components.paddle_conditions._async_register_frontend"
+
+
+@pytest.fixture(autouse=True)
+def _mock_frontend():
+    """Prevent frontend registration from needing hass.http in tests."""
+    with patch(FRONTEND_PATH, return_value=None):
+        yield
 
 
 async def test_config_flow_creates_entry(hass: HomeAssistant):
@@ -57,18 +70,20 @@ async def test_location_subentry_flow_with_preset(hass: HomeAssistant):
     assert result["step_id"] == "location"
 
     # Confirm pre-filled location details
-    result = await hass.config_entries.subentries.async_configure(
-        result["flow_id"],
-        user_input={
-            "name": "Lake Natoma",
-            "latitude": 38.636,
-            "longitude": -121.185,
-            "water_body_type": "lake",
-            "display_order": 0,
-            "usgs_station_id": "11446220",
-            "noaa_station_id": "",
-        },
-    )
+    with patch(SESSION_PATH), patch(WEATHER_CLIENT_PATH) as mock_cls:
+        mock_cls.return_value.fetch = AsyncMock()
+        result = await hass.config_entries.subentries.async_configure(
+            result["flow_id"],
+            user_input={
+                "name": "Lake Natoma",
+                "latitude": 38.636,
+                "longitude": -121.185,
+                "water_body_type": "lake",
+                "display_order": 0,
+                "usgs_station_id": "11446220",
+                "noaa_station_id": "",
+            },
+        )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["title"] == "Lake Natoma"
 
@@ -93,19 +108,21 @@ async def test_location_subentry_flow_custom(hass: HomeAssistant):
     assert result["step_id"] == "location"
 
     # Enter location details manually
-    result = await hass.config_entries.subentries.async_configure(
-        result["flow_id"],
-        user_input={
-            "name": "American River",
-            "latitude": 38.63,
-            "longitude": -121.22,
-            "water_body_type": "river",
-            "display_order": 1,
-            "usgs_station_id": "11446500",
-            "noaa_station_id": "",
-            "optimal_cfs": 2000,
-        },
-    )
+    with patch(SESSION_PATH), patch(WEATHER_CLIENT_PATH) as mock_cls:
+        mock_cls.return_value.fetch = AsyncMock()
+        result = await hass.config_entries.subentries.async_configure(
+            result["flow_id"],
+            user_input={
+                "name": "American River",
+                "latitude": 38.63,
+                "longitude": -121.22,
+                "water_body_type": "river",
+                "display_order": 1,
+                "usgs_station_id": "11446500",
+                "noaa_station_id": "",
+                "optimal_cfs": 2000,
+            },
+        )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["title"] == "American River"
 
@@ -243,3 +260,40 @@ async def test_options_flow_activity_change_resets_profile(hass: HomeAssistant):
     assert result["type"] == FlowResultType.CREATE_ENTRY
     # Profile should be reset to kayaking's default (flatwater)
     assert entry.options["profile"] == "flatwater"
+
+
+async def test_location_subentry_weather_api_failure(hass: HomeAssistant):
+    """Test that a weather API failure shows cannot_connect error."""
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], user_input={})
+    entry = result["result"]
+
+    result = await hass.config_entries.subentries.async_init(
+        (entry.entry_id, "location"),
+        context={"source": config_entries.SOURCE_USER},
+    )
+
+    # Select custom location
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"],
+        user_input={"preset": "custom"},
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "location"
+
+    # Submit location with weather API failing
+    with patch(SESSION_PATH), patch(WEATHER_CLIENT_PATH) as mock_cls:
+        mock_cls.return_value.fetch = AsyncMock(side_effect=Exception("API unreachable"))
+        result = await hass.config_entries.subentries.async_configure(
+            result["flow_id"],
+            user_input={
+                "name": "Bad Location",
+                "latitude": 0.01,
+                "longitude": 0.01,
+                "water_body_type": "lake",
+            },
+        )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "location"
+    assert result["errors"] == {"base": "cannot_connect"}
