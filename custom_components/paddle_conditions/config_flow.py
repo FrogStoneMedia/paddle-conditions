@@ -163,32 +163,70 @@ class LocationSubentryFlow(ConfigSubentryFlow):  # type: ignore[misc]
 
     async def async_step_location(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:
         """Handle location details."""
+        errors: dict[str, str] = {}
         if user_input is not None:
             user_input.setdefault(CONF_USGS_STATION_ID, "")
             user_input.setdefault(CONF_NOAA_STATION_ID, "")
             user_input.setdefault(CONF_DISPLAY_ORDER, 0)
             user_input.setdefault(CONF_OPTIMAL_CFS, None)
-            return self.async_create_entry(title=user_input[CONF_NAME], data=user_input)
+
+            # Validate coordinates by testing the weather API
+            try:
+                from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
+                from .api.open_meteo import OpenMeteoWeatherClient
+
+                session = async_get_clientsession(self.hass)
+                client = OpenMeteoWeatherClient(session)
+                await client.fetch(user_input[CONF_LATITUDE], user_input[CONF_LONGITUDE])
+            except Exception:
+                errors["base"] = "cannot_connect"
+
+            if not errors:
+                return self.async_create_entry(title=user_input[CONF_NAME], data=user_input)
 
         defaults = self._preset_defaults or {}
-        return self.async_show_form(step_id="location", data_schema=self._location_schema(defaults))
+        return self.async_show_form(
+            step_id="location",
+            data_schema=self._location_schema(defaults),
+            errors=errors,
+        )
 
     async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:
         """Handle editing an existing location."""
+        errors: dict[str, str] = {}
         if user_input is not None:
             user_input.setdefault(CONF_USGS_STATION_ID, "")
             user_input.setdefault(CONF_NOAA_STATION_ID, "")
             user_input.setdefault(CONF_DISPLAY_ORDER, 0)
             user_input.setdefault(CONF_OPTIMAL_CFS, None)
-            return self.async_update_reload_and_abort(
-                self._get_entry(),
-                self._get_reconfigure_subentry(),
-                title=user_input[CONF_NAME],
-                data=user_input,
-            )
+
+            # Validate coordinates by testing the weather API
+            try:
+                from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
+                from .api.open_meteo import OpenMeteoWeatherClient
+
+                session = async_get_clientsession(self.hass)
+                client = OpenMeteoWeatherClient(session)
+                await client.fetch(user_input[CONF_LATITUDE], user_input[CONF_LONGITUDE])
+            except Exception:
+                errors["base"] = "cannot_connect"
+
+            if not errors:
+                return self.async_update_reload_and_abort(
+                    self._get_entry(),
+                    self._get_reconfigure_subentry(),
+                    title=user_input[CONF_NAME],
+                    data=user_input,
+                )
 
         current = self._get_reconfigure_subentry().data
-        return self.async_show_form(step_id="reconfigure", data_schema=self._location_schema(current))
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=self._location_schema(current),
+            errors=errors,
+        )
 
 
 class PaddleOptionsFlow(OptionsFlow):  # type: ignore[misc]
