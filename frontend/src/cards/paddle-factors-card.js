@@ -1,4 +1,4 @@
-import { colorForScore, FACTOR_META, FACTOR_SENSOR_SUFFIX, fireMoreInfo } from "../utils.js";
+import { colorForScore, FACTOR_META, FACTOR_SENSOR_SUFFIX, fireMoreInfo, makeInteractive } from "../utils.js";
 import { CARD_STYLES } from "../styles/theme.js";
 
 const ALL_FACTORS = Object.keys(FACTOR_META);
@@ -137,6 +137,8 @@ class PaddleFactorsCard extends HTMLElement {
 
     const list = document.createElement("div");
     list.className = "factors-list";
+    list.setAttribute("role", "list");
+    list.setAttribute("aria-label", "Paddle condition factors");
 
     for (const factorKey of visibleFactors) {
       const meta = FACTOR_META[factorKey];
@@ -148,16 +150,23 @@ class PaddleFactorsCard extends HTMLElement {
       const sensorEntityId = this._getSensorEntityId(factorKey);
       const sensorEntity = sensorEntityId ? this._hass.states[sensorEntityId] : null;
 
+      const rawVal = sensorEntity && sensorEntity.state != null && sensorEntity.state !== "unavailable" && sensorEntity.state !== "unknown"
+        ? sensorEntity.state : null;
+      const valueText = rawVal ? (meta.unit ? `${rawVal} ${meta.unit}` : rawVal) : "unavailable";
+      const ariaText = `${meta.label}: ${valueText}, score ${scoreNum != null ? scoreNum : "unknown"} out of 100`;
+
       const row = document.createElement("div");
       row.className = "factor-row";
+      row.setAttribute("role", "listitem");
       if (sensorEntityId) {
-        row.addEventListener("click", () => fireMoreInfo(this, sensorEntityId));
+        makeInteractive(row, () => fireMoreInfo(this, sensorEntityId), ariaText);
       }
 
       // Icon circle
       const iconCircle = document.createElement("div");
       iconCircle.className = "icon-circle";
       iconCircle.style.background = color;
+      iconCircle.setAttribute("aria-hidden", "true");
       const haIcon = document.createElement("ha-icon");
       haIcon.setAttribute("icon", meta.icon);
       iconCircle.appendChild(haIcon);
@@ -170,16 +179,16 @@ class PaddleFactorsCard extends HTMLElement {
       // Raw value + unit
       const value = document.createElement("div");
       value.className = "factor-value";
-      if (sensorEntity && sensorEntity.state != null && sensorEntity.state !== "unavailable" && sensorEntity.state !== "unknown") {
-        const rawVal = sensorEntity.state;
-        value.textContent = meta.unit ? `${rawVal} ${meta.unit}` : rawVal;
-      } else {
-        value.textContent = "--";
-      }
+      value.textContent = rawVal ? (meta.unit ? `${rawVal} ${meta.unit}` : rawVal) : "--";
 
       // Progress bar
       const barOuter = document.createElement("div");
       barOuter.className = "progress-bar factor-bar";
+      barOuter.setAttribute("role", "progressbar");
+      barOuter.setAttribute("aria-valuenow", scoreNum != null ? String(scoreNum) : "0");
+      barOuter.setAttribute("aria-valuemin", "0");
+      barOuter.setAttribute("aria-valuemax", "100");
+      barOuter.setAttribute("aria-label", `${meta.label} score`);
       const barFill = document.createElement("div");
       barFill.className = "progress-fill";
       barFill.style.background = color;

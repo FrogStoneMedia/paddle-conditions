@@ -45,6 +45,25 @@ export function fireMoreInfo(element, entityId) {
   );
 }
 
+export function labelForRating(rating) {
+  const labels = { GO: "Good to go", CAUTION: "Caution", NO_GO: "Not recommended" };
+  return labels[rating] || "Unknown";
+}
+
+/** Make an element interactive: adds role="button", tabindex, keyboard Enter/Space. */
+export function makeInteractive(el, handler, label) {
+  el.setAttribute("role", "button");
+  el.setAttribute("tabindex", "0");
+  if (label) el.setAttribute("aria-label", label);
+  el.addEventListener("click", handler);
+  el.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      handler(e);
+    }
+  });
+}
+
 export const FACTOR_META = {
   wind_speed: { label: "Wind Speed", icon: "mdi:weather-windy", unit: "mph" },
   wind_gusts: { label: "Wind Gusts", icon: "mdi:weather-windy-variant", unit: "mph" },

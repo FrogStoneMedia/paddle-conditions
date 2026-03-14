@@ -29,10 +29,10 @@ class PaddleSpotsCard extends HTMLElement {
   getCardSize() { return 2; }
 
   _scoreColor(score) {
-    if (score == null) return "#666";
+    if (score == null) return "#999";
     if (score >= 70) return "#66BB6A";
-    if (score >= 40) return "#FDD835";
-    return "#F44336";
+    if (score >= 40) return "#FFD600";
+    return "#EF5350";
   }
 
   _ratingGradient(rating) {
@@ -89,9 +89,13 @@ class PaddleSpotsCard extends HTMLElement {
       const rating = attrs.rating || "NO_GO";
       const name = (attrs.friendly_name || "").replace(/ Paddle Score$/i, "");
 
+      const ratingText = { GO: "Good to go", CAUTION: "Caution", NO_GO: "Not recommended" }[rating] || "Unknown";
       const badge = this._el("div", {
         className: "spot-badge",
         style: { background: this._ratingGradient(rating) },
+        role: "button",
+        tabindex: "0",
+        "aria-label": `${name}: ${isNaN(score) ? "unavailable" : score} out of 100, ${ratingText}`,
       });
 
       badge.appendChild(this._el("div", {
@@ -101,17 +105,18 @@ class PaddleSpotsCard extends HTMLElement {
       }));
       badge.appendChild(this._el("div", { className: "badge-name", textContent: name }));
 
-      badge.addEventListener("click", () => {
-        const target = document.querySelector(`paddle-score-card`);
-        if (target) {
-          const cards = document.querySelectorAll("paddle-score-card");
-          for (const c of cards) {
-            if (c._config && c._config.entity === eid) {
-              c.scrollIntoView({ behavior: "smooth", block: "start" });
-              break;
-            }
+      const clickHandler = () => {
+        const cards = document.querySelectorAll("paddle-score-card");
+        for (const c of cards) {
+          if (c._config && c._config.entity === eid) {
+            c.scrollIntoView({ behavior: "smooth", block: "start" });
+            break;
           }
         }
+      };
+      badge.addEventListener("click", clickHandler);
+      badge.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); clickHandler(); }
       });
 
       row.appendChild(badge);
@@ -160,6 +165,16 @@ class PaddleSpotsCard extends HTMLElement {
         color: rgba(255,255,255,0.85);
         text-transform: uppercase;
         letter-spacing: 0.5px;
+      }
+      .spot-badge:focus-visible {
+        outline: 2px solid #03a9f4;
+        outline-offset: 2px;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+          animation-duration: 0.01ms !important;
+          transition-duration: 0.01ms !important;
+        }
       }
     `;
     return style;

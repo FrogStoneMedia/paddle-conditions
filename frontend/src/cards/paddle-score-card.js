@@ -1,4 +1,4 @@
-import { colorForRating, formatScore, iconForRating, fireMoreInfo } from "../utils.js";
+import { colorForRating, formatScore, iconForRating, fireMoreInfo, labelForRating, makeInteractive } from "../utils.js";
 import { CARD_STYLES } from "../styles/theme.js";
 
 // NOTE: innerHTML usage is safe here — all data comes from Home Assistant's
@@ -153,13 +153,15 @@ class PaddleScoreCard extends HTMLElement {
     border.className = "score-border";
     border.style.background = color;
 
+    const ratingText = labelForRating(rating);
     const layout = document.createElement("div");
     layout.className = "score-layout";
-    layout.addEventListener("click", () => fireMoreInfo(this, this._config.entity));
+    makeInteractive(layout, () => fireMoreInfo(this, this._config.entity), `${name}: ${formatScore(isNaN(score) ? null : score)}, ${ratingText}`);
 
     const iconCircle = document.createElement("div");
     iconCircle.className = "score-icon";
     iconCircle.style.background = color;
+    iconCircle.setAttribute("aria-hidden", "true");
     const haIcon = document.createElement("ha-icon");
     haIcon.setAttribute("icon", icon);
     iconCircle.appendChild(haIcon);

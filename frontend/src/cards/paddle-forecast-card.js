@@ -149,12 +149,14 @@ class PaddleForecastCard extends HTMLElement {
     // Forecast table
     const table = document.createElement("table");
     table.className = "forecast-table";
+    table.setAttribute("aria-label", "Paddle conditions forecast");
 
     const thead = document.createElement("thead");
     const headerRow = document.createElement("tr");
     const headers = ["Time", "Score", "Rating", "Wind", "Temp", "UV"];
     for (const h of headers) {
       const th = document.createElement("th");
+      th.setAttribute("scope", "col");
       th.textContent = h;
       headerRow.appendChild(th);
     }
@@ -169,8 +171,10 @@ class PaddleForecastCard extends HTMLElement {
       const tr = document.createElement("tr");
 
       // Highlight best window row
-      if (attrs.best_block && block.start === attrs.best_block) {
+      const isBest = attrs.best_block && block.start === attrs.best_block;
+      if (isBest) {
         tr.className = "best-row";
+        tr.setAttribute("aria-label", "Best time window");
       }
 
       // Time

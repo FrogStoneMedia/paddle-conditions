@@ -41,10 +41,10 @@ class PaddleScoreCard extends HTMLElement {
   }
 
   _scoreColor(score) {
-    if (score == null) return "#666";
+    if (score == null) return "#999";
     if (score >= 70) return "#66BB6A";
-    if (score >= 40) return "#FDD835";
-    return "#F44336";
+    if (score >= 40) return "#FFD600";
+    return "#EF5350";
   }
 
   _ratingGradient(rating) {
@@ -208,7 +208,13 @@ class PaddleScoreCard extends HTMLElement {
     hero.appendChild(this._el("div", { className: "hero-rating", textContent: this._ratingLabel(rating) }));
 
     hero.style.cursor = "pointer";
+    hero.setAttribute("role", "button");
+    hero.setAttribute("tabindex", "0");
+    hero.setAttribute("aria-label", `${name}: score ${isNaN(score) ? "unavailable" : score}, ${this._ratingLabel(rating)}. Tap for details.`);
     hero.addEventListener("click", () => this._openOverlay());
+    hero.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); this._openOverlay(); }
+    });
 
     if (blocks.length > 0) {
       const safeBlocks = this._filterDaylightBlocks(blocks);
@@ -298,18 +304,33 @@ class PaddleScoreCard extends HTMLElement {
       const tile = this._el("div", {
         className: `factor-tile${isExpanded ? " factor-expanded" : ""}${hasForecast ? " factor-clickable" : ""}`,
       });
+      if (hasForecast) {
+        tile.setAttribute("role", "button");
+        tile.setAttribute("tabindex", "0");
+        tile.setAttribute("aria-expanded", String(isExpanded));
+        tile.setAttribute("aria-label", `${f.label}: ${detail}, score ${subScore} out of 100. ${hasForecast ? "Tap to see forecast." : ""}`);
+      }
 
       const header = this._el("div", { className: "factor-header" });
-      header.appendChild(this._el("span", { className: "factor-icon", textContent: f.icon }));
+      const iconSpan = this._el("span", { className: "factor-icon", textContent: f.icon });
+      iconSpan.setAttribute("aria-hidden", "true");
+      header.appendChild(iconSpan);
       header.appendChild(this._el("span", { className: "factor-label", textContent: f.label }));
       if (hasForecast) {
-        header.appendChild(this._el("span", { className: "factor-chevron", textContent: isExpanded ? "\u25B2" : "\u25BC" }));
+        const chevron = this._el("span", { className: "factor-chevron", textContent: isExpanded ? "\u25B2" : "\u25BC" });
+        chevron.setAttribute("aria-hidden", "true");
+        header.appendChild(chevron);
       }
       tile.appendChild(header);
 
       tile.appendChild(this._el("div", { className: "factor-value", textContent: detail }));
 
       const barWrap = this._el("div", { className: "factor-bar-wrap" });
+      barWrap.setAttribute("role", "progressbar");
+      barWrap.setAttribute("aria-valuenow", String(subScore));
+      barWrap.setAttribute("aria-valuemin", "0");
+      barWrap.setAttribute("aria-valuemax", "100");
+      barWrap.setAttribute("aria-label", `${f.label} score`);
       barWrap.appendChild(this._el("div", { className: "factor-bar", style: { width: `${subScore}%`, background: this._scoreColor(subScore) } }));
       tile.appendChild(barWrap);
 
@@ -321,9 +342,13 @@ class PaddleScoreCard extends HTMLElement {
       }
 
       if (hasForecast) {
-        tile.addEventListener("click", () => {
+        const toggleFactor = () => {
           this._expandedFactor = this._expandedFactor === f.key ? null : f.key;
           this._render();
+        };
+        tile.addEventListener("click", toggleFactor);
+        tile.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleFactor(); }
         });
       }
 
@@ -395,6 +420,10 @@ class PaddleScoreCard extends HTMLElement {
         className: `forecast-block${isCurrent ? " current" : ""}${expanded ? " expanded" : ""}`,
       });
       block.dataset.idx = i;
+      block.setAttribute("role", "button");
+      block.setAttribute("tabindex", "0");
+      block.setAttribute("aria-expanded", String(expanded));
+      block.setAttribute("aria-label", `${timeLabel}${isCurrent ? " (now)" : ""}: score ${b.score}, wind ${Math.round(b.wind_mph)} mph, ${Math.round(b.temp_f)} degrees`);
 
       if (isCurrent) block.appendChild(this._el("div", { className: "now-label", textContent: "NOW" }));
       block.appendChild(this._el("div", { className: "block-time", textContent: timeLabel }));
@@ -402,9 +431,13 @@ class PaddleScoreCard extends HTMLElement {
       block.appendChild(this._el("div", { className: "block-detail", textContent: `${Math.round(b.wind_mph)} mph` }));
       block.appendChild(this._el("div", { className: "block-detail", textContent: `${Math.round(b.temp_f)}\u00B0F` }));
 
-      block.addEventListener("click", () => {
+      const toggleBlock = () => {
         this._expandedBlock = this._expandedBlock === i ? null : i;
         this._render();
+      };
+      block.addEventListener("click", toggleBlock);
+      block.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleBlock(); }
       });
 
       row.appendChild(block);
@@ -441,11 +474,16 @@ class PaddleScoreCard extends HTMLElement {
 
   _openOverlay() {
     this._overlayOpen = true;
+    this._lastFocused = this.shadowRoot.activeElement || document.activeElement;
     document.addEventListener("keydown", this._boundEscHandler);
     this._render();
     requestAnimationFrame(() => {
       const el = this.shadowRoot.querySelector(".overlay");
-      if (el) el.classList.add("overlay-visible");
+      if (el) {
+        el.classList.add("overlay-visible");
+        const closeBtn = this.shadowRoot.querySelector(".ov-close");
+        if (closeBtn) closeBtn.focus();
+      }
     });
   }
 
@@ -457,10 +495,12 @@ class PaddleScoreCard extends HTMLElement {
         this._overlayOpen = false;
         document.removeEventListener("keydown", this._boundEscHandler);
         this._render();
+        if (this._lastFocused && this._lastFocused.focus) this._lastFocused.focus();
       }, { once: true });
     } else {
       this._overlayOpen = false;
       document.removeEventListener("keydown", this._boundEscHandler);
+      if (this._lastFocused && this._lastFocused.focus) this._lastFocused.focus();
     }
   }
 
@@ -690,6 +730,9 @@ class PaddleScoreCard extends HTMLElement {
 
   _buildOverlay(name, score, rating, blocks) {
     const overlay = this._el("div", { className: "overlay" });
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-label", `${name} paddle conditions details`);
     const backdrop = this._el("div", { className: "overlay-backdrop" });
     backdrop.addEventListener("click", () => this._closeOverlay());
     overlay.appendChild(backdrop);
@@ -700,7 +743,13 @@ class PaddleScoreCard extends HTMLElement {
     const topBar = this._el("div", { className: "ov-topbar" });
     topBar.appendChild(this._el("div", { className: "ov-name", textContent: name }));
     const closeBtn = this._el("div", { className: "ov-close", textContent: "\u2715" });
+    closeBtn.setAttribute("role", "button");
+    closeBtn.setAttribute("tabindex", "0");
+    closeBtn.setAttribute("aria-label", "Close details");
     closeBtn.addEventListener("click", () => this._closeOverlay());
+    closeBtn.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); this._closeOverlay(); }
+    });
     topBar.appendChild(closeBtn);
     content.appendChild(topBar);
 
@@ -1181,7 +1230,7 @@ class PaddleScoreCard extends HTMLElement {
         font-weight: 600;
       }
       .ov-chart-unit {
-        color: #666;
+        color: #999;
         font-size: 10px;
       }
       .ov-chart-legend {
@@ -1196,7 +1245,7 @@ class PaddleScoreCard extends HTMLElement {
       .ov-ylabel {
         position: absolute;
         font-size: 9px;
-        color: #666;
+        color: #999;
         transform: translateY(-50%);
         white-space: nowrap;
       }
@@ -1255,8 +1304,24 @@ class PaddleScoreCard extends HTMLElement {
       .ov-footer {
         text-align: center;
         padding: 12px;
-        color: #666;
+        color: #999;
         font-size: 11px;
+      }
+      [role="button"]:focus-visible,
+      [tabindex]:focus-visible {
+        outline: 2px solid #03a9f4;
+        outline-offset: 2px;
+        border-radius: 4px;
+      }
+      .ov-close:focus-visible {
+        outline-color: #fff;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.01ms !important;
+        }
       }
     `;
     return style;

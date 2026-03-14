@@ -41,7 +41,7 @@ const STYLES = `
   }
   .metric-chip.inactive {
     background: transparent;
-    opacity: 0.5;
+    opacity: 0.6;
   }
   .chart-container {
     position: relative;
@@ -176,15 +176,30 @@ class PaddleChartCard extends HTMLElement {
     // Metric toggle chips
     const chips = document.createElement("div");
     chips.className = "metric-chips";
+    chips.setAttribute("role", "group");
+    chips.setAttribute("aria-label", "Chart data layers");
     for (const [key, meta] of Object.entries(CHART_METRICS)) {
+      const isActive = this._activeMetrics.has(key);
       const chip = document.createElement("span");
-      chip.className = `metric-chip ${this._activeMetrics.has(key) ? "active" : "inactive"}`;
+      chip.className = `metric-chip ${isActive ? "active" : "inactive"}`;
       chip.style.borderColor = meta.color;
-      if (this._activeMetrics.has(key)) {
+      if (isActive) {
         chip.style.background = meta.color;
       }
       chip.textContent = meta.label;
-      chip.addEventListener("click", () => this._toggleMetric(key));
+      chip.setAttribute("role", "button");
+      chip.setAttribute("tabindex", key === "score" ? "-1" : "0");
+      chip.setAttribute("aria-pressed", String(isActive));
+      chip.setAttribute("aria-label", `Toggle ${meta.label} ${key === "score" ? "(always on)" : ""}`);
+      if (key !== "score") {
+        chip.addEventListener("click", () => this._toggleMetric(key));
+        chip.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            this._toggleMetric(key);
+          }
+        });
+      }
       chips.appendChild(chip);
     }
     card.appendChild(chips);
@@ -192,7 +207,10 @@ class PaddleChartCard extends HTMLElement {
     // Chart canvas
     const container = document.createElement("div");
     container.className = "chart-container";
+    container.setAttribute("role", "img");
+    container.setAttribute("aria-label", `${this._config.name || "Forecast"} chart showing ${[...this._activeMetrics].join(", ")} over time`);
     const canvas = document.createElement("canvas");
+    canvas.setAttribute("aria-hidden", "true");
     container.appendChild(canvas);
     card.appendChild(container);
 
