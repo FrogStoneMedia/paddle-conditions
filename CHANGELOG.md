@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.0.0
+
+### Added
+- Accessibility: keyboard navigation (Enter/Space) on all interactive elements
+- Accessibility: ARIA roles, labels, and states for screen readers
+- Accessibility: focus-visible outlines on all focusable elements
+- Accessibility: prefers-reduced-motion support to disable animations
+- Accessibility: dialog focus trap on detail overlay
+- Accessibility: progressbar roles on factor score bars
+- Retina-quality mobile screenshots in README documentation
+- Accessibility section in README
+
+### Fixed
+- Improved color contrast throughout all cards (chart thresholds, zone backgrounds, score colors, inactive elements)
+
 ## 0.9.0
 
 ### Added
