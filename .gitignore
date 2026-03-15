@@ -16,3 +16,11 @@ frontend/dist/
 *~
 .DS_Store
 Thumbs.db
+
+# Website is a separate repo (michaelkahn/paddle-conditions-website)
+website/
+
+# API
+api/node_modules/
+api/dist/
+api/.env
