@@ -24,4 +24,9 @@ website/
 api/node_modules/
 api/dist/
 api/.env
+
+# App (React SPA)
+app/node_modules/
+app/dist/
 .worktrees/
+.env.secrets
