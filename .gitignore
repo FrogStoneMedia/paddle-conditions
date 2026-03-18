@@ -20,13 +20,10 @@ Thumbs.db
 # Website is a separate repo (michaelkahn/paddle-conditions-website)
 website/
 
-# API
-api/node_modules/
-api/dist/
-api/.env
+# API is a separate repo (michaelkahn/paddle-conditions-api)
+api/
 
-# App (React SPA)
-app/node_modules/
-app/dist/
+# App is a separate repo (michaelkahn/paddle-conditions-app)
+app/
 .worktrees/
 .env.secrets
