@@ -15,14 +15,17 @@ Three connected changes:
 Flat card with left border accent, text-only conditions (wind, temp, UV), no forecast data.
 
 ### New Design
-- Dark gradient background (`linear-gradient(135deg, #1e293b, #0f172a)`) with `1px solid #334155` border, `border-radius: 12px`
-- Location name (18px bold) and subtitle (12px muted, e.g. "Sacramento, CA") top-left
+
+**Theme:** All colors use CSS variables (`var(--color-card)`, `var(--color-border)`, `var(--color-text)`, etc.) to support both light and dark modes. The mockups below describe the dark-mode appearance; light mode uses the same layout with the corresponding light CSS variable values. No hardcoded colors.
+
+- Card background: `var(--color-card)` with subtle gradient using `var(--color-bg)` as second stop, `1px solid var(--color-border)`, `border-radius: 12px`
+- Location name (18px bold, `var(--color-text)`) and subtitle (12px, `var(--color-text-muted)`) top-left
 - Score circle (56px) top-right with colored glow shadow (`box-shadow: 0 0 16px` at 40% opacity) using GO/CAUTION/NO_GO colors
-- Inline condition stats row below name: Wind, Air, Water Temp, UV - each with uppercase 10px muted label and 13px bold value
-- Mini forecast blocks at bottom, separated by a `1px solid #334155` top border:
+- Inline condition stats row below name: Wind, Air, Water Temp, UV - each with uppercase 10px `var(--color-text-muted)` label and 13px bold `var(--color-text)` value
+- Mini forecast blocks at bottom, separated by `1px solid var(--color-border)` top border:
   - 5 time slots: 6-9a, 9-12p, 12-3p, 3-6p, 6-9p
   - Each block: `flex: 1`, `border-radius: 6px`, background tinted with rating color at 15% opacity
-  - Time label (10px muted) above score (13px bold, colored by rating)
+  - Time label (10px `var(--color-text-muted)`) above score (13px bold, colored by rating)
 
 ### Progressive Loading
 - Cards render immediately from bulk endpoint data (name, score, conditions)
@@ -49,19 +52,19 @@ Plain form with dropdowns, flat "Available Data" checklist with checkmark/dash i
 
 **Activity Selector**
 - Toggle buttons instead of dropdown: SUP | Kayaking
-- Selected state: `background: rgba(14, 165, 233, 0.15)`, `border: 1px solid #0ea5e9`, sky blue text
-- Unselected: `background: #1e293b`, `border: 1px solid #334155`, muted text
+- Selected state: `background: rgba(14, 165, 233, 0.15)`, `border: 1px solid var(--color-water)`, `color: var(--color-water)`
+- Unselected: `background: var(--color-bg-secondary)`, `border: 1px solid var(--color-border)`, `color: var(--color-text-muted)`
 
 **Profile Selector**
 - Same toggle button pattern
 - Options change based on activity (SUP: Recreational/Racing/Family, Kayaking: Flatwater/River/Ocean)
 
 **Data Available**
-- iOS-style grouped list (`background: #1e293b`, `border: 1px solid #334155`, `border-radius: 10px`)
+- iOS-style grouped list (`background: var(--color-bg-secondary)`, `border: 1px solid var(--color-border)`, `border-radius: 10px`)
 - Each row: icon (28px rounded square) + data type label + source attribution right-aligned
 - Available rows: green icon background (`rgba(76, 175, 80, 0.15)`), green stroke, white text, source in muted text
 - Unavailable rows: muted icon background (`rgba(100, 116, 139, 0.1)`), gray stroke, gray text, explanation (e.g. "Inland lake")
-- Rows separated by `1px solid #334155` borders
+- Rows separated by `1px solid var(--color-border)` borders
 
 Data type icons (SVG, 14px):
 - Water Temperature: thermometer
@@ -84,7 +87,7 @@ This section combines two sources:
   - Data type icons (24px, smaller versions of the same icons from Data Available) showing what this station provides
   - Toggle switch (44x26px) on the right
 - Toggle ON: sky blue background, white knob right-aligned
-- Toggle OFF: `#334155` background, muted knob left-aligned
+- Toggle OFF: `var(--color-border)` background, muted knob left-aligned
 - Station text and icons dim when toggled off
 - Stations sorted by distance, nearest first
 - Stations within 20km on by default, others off
