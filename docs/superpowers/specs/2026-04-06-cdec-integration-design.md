@@ -50,9 +50,10 @@ Add CDEC as a new water data provider for California water bodies, running along
 | Wind Direction | 10 | E | DEG | Supplements weather |
 | Air Temp | 4 or 30 | E | DEG F | Supplements weather |
 | Turbidity | 27 | E | NTU | Water clarity |
-| Dissolved Oxygen | 71 | E | MG/L | Water quality |
-| pH | 100 | E | PH | Water chemistry |
-| Electrical Conductivity | 61 | E | US/CM | Salinity proxy |
+| Dissolved Oxygen | 61 | E | MG/L | Water quality |
+| pH | 62 | E | PH | Water chemistry |
+| Electrical Conductivity | 100 | E | US/CM | Salinity proxy |
+| Wind, Peak Gust | 77 | E | MPH | Supplements weather |
 
 ## Architecture: Peer Provider Pattern
 
@@ -81,8 +82,8 @@ Follows the same pattern as `usgs.ts` and `noaa.ts`. Exports pure functions, han
 - `fetchCdecReservoirData(stationId: string): Promise<ReservoirData | null>` - Sensors 15, 6, 76, 23, 7, 85. Combined reservoir metrics.
 - `fetchCdecWind(stationId: string): Promise<{speed?: number, direction?: number} | null>` - Sensors 9, 10.
 - `fetchCdecAirTemp(stationId: string): Promise<number | null>` - Sensor 4 or 30.
-- `fetchCdecWaterQuality(stationId: string): Promise<WaterQualityData | null>` - Sensors 27, 71, 100, 61.
-- `fetchCdecStationMeta(stationId: string): Promise<StationMeta | null>` - Station metadata lookup via staMeta endpoint.
+- `fetchCdecWaterQuality(stationId: string): Promise<WaterQualityData | null>` - Sensors 27, 61, 62, 100.
+- `fetchCdecStationMeta(stationId: string): Promise<StationMeta | null>` - Station metadata. The `staMeta` endpoint returns HTML (not JSON), so sensor availability is determined by probing the JSON data endpoint for each sensor group and checking for non-empty responses. Results cached indefinitely (station sensor inventory is static).
 
 ### Implementation Details
 
@@ -91,6 +92,8 @@ Follows the same pattern as `usgs.ts` and `noaa.ts`. Exports pure functions, han
 - In-memory TTL cache: 15 min for water/weather, 24 hours for station metadata
 - Cache key format: `cdec:{stationId}:{sensorGroup}` (e.g., `cdec:FOL:reservoir`)
 - Graceful degradation: return null for any sensor that fails or has no data
+- **Timestamp handling:** CDEC returns timestamps in Pacific Standard Time with format `"YYYY-M-D H:MM"` (no timezone, no ISO format, no zero-padding). Parse and normalize to UTC before comparing with USGS timestamps (which are UTC).
+- **Sensor availability detection:** Not all stations have all sensors. On first fetch for a station, probe each sensor group and cache which ones return data. Skip unavailable sensors on subsequent fetches.
 
 ### Return Types
 
@@ -127,12 +130,13 @@ type WaterQualityData = {
 
 ### `water_bodies` table
 
-Add column:
+Add columns:
 - `cdecStationId` (varchar, nullable) - Direct CDEC station ID lookup, alongside existing `usgsStationId` and `noaaStationId`
+- `reservoirCapacityAf` (float, nullable) - Maximum reservoir capacity in acre-feet. Required for reservoir level scoring. Populated from CDEC reservoir info or manually.
 
 ### `water_body_stations` table
 
-Add `'cdec'` as a valid `stationType` value. The existing `dataTypes` JSON column stores available sensor groups (e.g., `["waterTemp", "flow", "reservoir", "waterQuality"]`).
+Add `'cdec'` to the `stationType` enum (currently `['usgs', 'noaa']`). This requires a Drizzle migration to alter the enum. The existing `dataTypes` JSON column stores available sensor groups (e.g., `["waterTemp", "flow", "reservoir", "waterQuality"]`). The `dataTypes` array is populated during station setup based on sensor availability detection.
 
 ### `locations` config
 
@@ -180,7 +184,19 @@ When a CA water body has both USGS and CDEC stations:
 1. **Parallel fetch** - USGS, NOAA, and CDEC requests fire concurrently
 2. **Freshest wins** - For overlapping metrics (water temp, flow), use whichever source returned a more recent observation. Track source in the response.
 3. **CDEC-exclusive pass-through** - Reservoir data, water quality, river stage, scheduled releases are CDEC-only. No merge needed.
-4. **Wind/air temp as fallback** - CDEC wind and air temp used only if NWS/Open-Meteo didn't return data (true fallback, not merge)
+4. **Wind/air temp as fallback** - CDEC wind and air temp used only if NWS/Open-Meteo didn't return data (true fallback, not merge). Note: wind/air temp sensors are only available at CDEC weather stations, not at most water monitoring stations. This fallback only activates if the water body has an associated CDEC station with these sensors.
+
+## Sensor Availability Note
+
+Not all CDEC stations have all sensors. In particular:
+
+- **Water quality sensors** (turbidity, DO, pH, conductivity) are rare at river gauge and reservoir stations. They are primarily available at specialized DWR water quality monitoring stations, mostly in the Sacramento-San Joaquin Delta. The six target stations (FOL, NAT, AFO, CBR, HST, ORO) do not have water quality sensors.
+- **Wind sensors** (speed, direction, gusts) are not available at most water monitoring stations. They are available at weather stations, which are separate from river/reservoir gauges.
+- **Air temp** is available at some but not all water stations.
+
+The CDEC service must detect sensor availability per station (see Implementation Details) and only fetch sensors that are known to return data. Water quality and pet safety features are "when available" -- they activate when a water body is associated with a CDEC station that has WQ sensors, but most initial water bodies will not have this data.
+
+To surface water quality data for target water bodies, the station discovery process should also search for nearby DWR water quality monitoring stations in addition to the primary flow/level gauge station.
 
 ## New Scoring Factors
 
@@ -188,13 +204,18 @@ When a CA water body has both USGS and CDEC stations:
 
 For reservoir water bodies, score based on current storage relative to capacity.
 
+**Capacity data source:** Add `reservoirCapacityAf` column (float, nullable) to the `water_bodies` table. Populate from CDEC's reservoir info endpoint (`reportapp/javareports?name=ResInfo`) or manually for key reservoirs:
+- Folsom Lake: 977,000 AF
+- Lake Natoma: 8,760 AF
+- Lake Oroville: 3,537,577 AF
+
 | Range | Rating | Rationale |
 |-------|--------|-----------|
 | 60-100% capacity | Ideal | Good launch access, normal conditions |
 | 30-60% capacity | Marginal | Some ramps may be unusable, exposed hazards |
 | <20% capacity | No-go | Launch ramps unusable, navigation hazards |
 
-Profile-dependent: kayakers tolerate lower levels better than SUP.
+Profile-dependent: kayakers tolerate lower levels better than SUP. Requires `reservoirCapacityAf` to be set on the water body; if null, this factor is skipped.
 
 ### 2. Dam Release / Outflow
 
@@ -255,7 +276,7 @@ petSafety?: {
 
 **SAFE:** All metrics within normal ranges
 
-When insufficient data is available, the rating is omitted (not shown) rather than defaulting to SAFE.
+When insufficient data is available, the rating is omitted (not shown) rather than defaulting to SAFE. Since water quality sensors are only available at specialized DWR monitoring stations (not at most river/reservoir gauges), pet safety will initially be unavailable for most water bodies until nearby WQ stations are identified and associated.
 
 ### Profile Integration
 
@@ -330,4 +351,4 @@ Capture real CDEC API responses for test fixtures:
 - **Other state water data sources:** Oregon OWRD, Colorado DWR, Texas TWDB can follow the same peer provider pattern. Add a new service module + `stationType` per source.
 - **Algal bloom advisories:** Integrate state/county algal bloom advisory feeds for authoritative warnings beyond sensor-derived estimates.
 - **Historical baselines:** Use CDEC's daily/monthly data to establish seasonal baselines for river stage normalization.
-- **Sensor availability detection:** Auto-detect which sensors a station actually reports by querying recent data, since not all stations have all sensors.
+- **DWR water quality station mapping:** Systematically identify DWR continuous monitoring stations near popular paddle water bodies to enable water quality scoring and pet safety for more locations.
