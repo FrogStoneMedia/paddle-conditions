@@ -54,6 +54,12 @@ CDEC integration is live and deployed as of 2026-04-06. The core data pipeline, 
 - [ ] Add reservoirCapacityAf for other CA reservoirs as they're cataloged
 - [ ] Set damOutflowThreshold per water body for dam release veto scoring
 
+### User Data Source Submissions
+- [ ] Design a way for users to suggest data sources or corrections (e.g., "this lake has a water quality station you're not using")
+- [ ] Could be a simple form on the website footer or a feedback link on the location detail page
+- [ ] Consider: email form, GitHub issue template, or in-app feedback button
+- [ ] Document the process in the website footer or docs
+
 ### Website Docs
 - [x] Add CDEC data source to location-detail, caching, adding-locations pages
 - [x] Document all scoring factors (river stage, reservoir level, water quality) on scores-and-ratings page
