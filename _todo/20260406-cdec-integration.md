@@ -8,12 +8,15 @@ CDEC integration is live and deployed as of 2026-04-06. The core data pipeline, 
 **Plan:** `docs/superpowers/plans/2026-04-06-cdec-integration.md`
 
 ### What's Deployed
-- CDEC service module (`api/src/services/cdec.ts`) - 7 fetch functions, 17 tests
-- Scoring: reservoir level, water quality composite, pet safety, dam release veto
+- CDEC service module (`api/src/services/cdec.ts`) - 7 fetch functions + historical stage + baseline computation
+- Scoring: reservoir level, water quality composite, pet safety, dam release veto, river stage (percentile-based)
 - Conditions service merges USGS + CDEC + NOAA with source tracking
-- DB migration applied to test and production
+- River stage baselines for AFO and CBR (migration 0008, 24 rows)
+- Water data displays: reservoir gauges, river stage gauge, pet safety badges, water quality tiles, streamflow chart
+- 24h flow history from USGS instantaneous values endpoint
+- `reservoirCapacityAf` loaded from DB, `stageContext` in API response
 - Three CA water bodies configured: Folsom Lake (FOL), Lake Natoma (NAT+AFO), South Fork American River (CBR+AFO)
-- Changelog updated in website repo
+- Website docs updated for all CDEC features
 
 ## Phases
 
@@ -82,30 +85,32 @@ CDEC integration is live and deployed as of 2026-04-06. The core data pipeline, 
 - Reservoir INFLOW/OUTFLOW/RELEASE descriptions must not map to `flow` dataType.
 - Production SSH uses key `~/.ssh/paddleconditions_prod` (not password), port 11208.
 - Deploy is rsync of built `dist/` to `~/public_html/api.paddleconditions.com/dist/` + touch `tmp/restart.txt`.
-- 3 pre-existing test failures in jobs-integration and purge-soft-deletes tests (not related to CDEC work).
+- 3 pre-existing test failures in jobs-integration and purge-soft-deletes tests (not related to CDEC work). UPDATE: these may be resolved now (488 tests all passing as of 2026-04-07).
+- App deploy is rsync of built `dist/` to `~/public_html/app.paddleconditions.com/` (no restart needed, static files).
+- Water body conditions cache must be flushed after API changes that add new fields to the response. Set `next_fetch_at` to past date for affected rows.
+- `reservoirCapacityAf` was a TODO null in conditions.ts line 577 until this session. Now loaded from `waterBodies` table via `WaterBodyCacheService.getReservoirCapacity()`.
+- USGS instantaneous values endpoint supports `period=PT24H` for historical data. Returns 15-min readings, downsample to hourly for charts.
 - CDEC `dur_code=D` (daily) returns empty for river stage at AFO and CBR. Must use `dur_code=E` (event/15min) and aggregate to daily averages.
 - CDEC uses `-9999` as a sentinel value for missing data that is NOT always flagged with bad data flags (N, v). Filter by `value > -100`.
 - CBR station has periods of sentinel values mixed with valid data, especially in 2021-2022. The p10 percentile was corrupted before adding the sentinel filter.
 
-## Session Notes -- 2026-04-06
+## Session Notes -- 2026-04-07
 
-### Completed
-- Full CDEC integration: spec, plan, implementation (11 tasks), review, deploy
-- Station Discovery Service: 4 functions, 28 tests, 817 lines across 2 files
-- Spec: `docs/superpowers/specs/2026-04-06-cdec-station-discovery-design.md`
-- Plan: `docs/superpowers/plans/2026-04-06-cdec-station-discovery.md`
+### Completed This Session
+- **River stage scoring**: spec, plan, 8-task implementation, code review, deploy. 30 new tests (488 total). Specs at `docs/superpowers/specs/2026-04-06-river-stage-scoring-design.md`
+- **Water data displays**: spec, plan, 7-task implementation, deploy. New frontend components: WaterConditionsTiles (reservoir gauges, river stage gauge, pet safety badges), WaterQualityRow (threshold-colored metrics), StreamflowChart (24h Recharts area chart with bands)
+- **API enhancements**: `reservoirCapacityAf` loaded from DB, `stageContext` with percentile context, `flowHistory` from USGS 24h instantaneous values
+- **Website docs**: 4 pages updated with CDEC features (scores-and-ratings, location-detail, caching, adding-locations)
+- **N/A tiles**: Pet safety and water quality show "No data source" when sensors unavailable
 
-### Session 2 - River Stage Scoring
-- Design spec: `docs/superpowers/specs/2026-04-06-river-stage-scoring-design.md`
-- Plan: `docs/superpowers/plans/2026-04-06-river-stage-scoring.md`
-- `scoreRiverStage` function with percentile-based scoring (17 unit tests)
-- Veto at p95 + factor in `computePaddleScore` (7 integration tests)
-- `fetchCdecHistoricalStage` with event-to-daily aggregation + `computeStageBaseline` (6 service tests)
-- Baselines populated for AFO (6.0-13.9 ft range) and CBR (1.2-8.6 ft range)
-- Migration 0008 applied, deployed to production
-- Fixed: cached path missing stageBaseline, varchar(3) too short, sentinel values, month cache key
+### All Specs/Plans Created
+- `docs/superpowers/specs/2026-04-06-river-stage-scoring-design.md`
+- `docs/superpowers/plans/2026-04-06-river-stage-scoring.md`
+- `docs/superpowers/specs/2026-04-06-water-data-displays-design.md`
+- `docs/superpowers/plans/2026-04-06-water-data-displays.md`
 
 ### Next Steps
-- **Website docs**: document CDEC data source, water quality scoring, pet safety advisory, river stage scoring
-- **Additional water bodies**: use `findNearbyStations()` + `getStationSensors()` to set up new CA lakes
+- **DWR water quality station mapping**: find WQ monitoring stations near FOL/NAT/AFO (mostly in Delta)
+- **Additional water bodies**: use `findNearbyStations()` + `getStationSensors()` to set up Oroville and other CA lakes
+- **User data source submissions**: design a feedback mechanism for users to suggest stations/corrections
 - Delete the `cdec-integration` branch (already merged)
