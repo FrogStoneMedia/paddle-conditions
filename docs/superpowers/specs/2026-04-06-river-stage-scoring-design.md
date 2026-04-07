@@ -46,6 +46,8 @@ A service function `computeStageBaseline(stationId: string)` handles baseline co
 
 Run once per station during station setup. Re-run annually or on demand to incorporate new data.
 
+**Minimum sample threshold:** Months with `sampleCount` < 60 (roughly 2+ years of daily data) produce unreliable percentiles. The scorer treats these months as "no baseline" and returns null, excluding river stage from the composite score via weight renormalization.
+
 ### CDEC Historical Data API
 
 Same endpoint as real-time, with different parameters:
@@ -84,6 +86,7 @@ Linear interpolation between threshold points, consistent with existing scoring 
 **Returns null when:**
 - `currentStageFt` is null
 - No baseline data exists for the station/month combination
+- Baseline `sampleCount` < 60 (insufficient data for reliable percentiles)
 
 ### Hard Veto
 
