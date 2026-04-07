@@ -25,7 +25,7 @@ CDEC integration is live and deployed as of 2026-04-06. The core data pipeline, 
 - [x] Station discovery API
 - [x] River stage scoring
 - [ ] DWR water quality station mapping
-- [ ] Website docs for CDEC features
+- [x] Website docs for CDEC features
 
 ## Tasks
 
@@ -55,9 +55,10 @@ CDEC integration is live and deployed as of 2026-04-06. The core data pipeline, 
 - [ ] Set damOutflowThreshold per water body for dam release veto scoring
 
 ### Website Docs
-- [ ] Add CDEC data source docs to `website/src/pages/docs/`
-- [ ] Document water quality scoring and pet safety advisory
-- [ ] Document reservoir level scoring
+- [x] Add CDEC data source to location-detail, caching, adding-locations pages
+- [x] Document all scoring factors (river stage, reservoir level, water quality) on scores-and-ratings page
+- [x] Document pet safety advisory and expanded veto list
+- [x] Document activity profile differences for river stage direction
 
 ## Lore
 
