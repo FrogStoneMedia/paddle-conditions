@@ -79,12 +79,12 @@ Each metric tile shows the value colored by its threshold bracket. Tiles only re
 
 ### Tile Rendering Logic
 
-The `WaterConditionsTiles` component receives `current`, `waterBodyType`, and `reservoirCapacityAf`. It renders:
+The `WaterConditionsTiles` component receives the full `conditions` response and `waterBodyType`. It reads water fields from the top level of the response. It renders:
 
 1. Nothing if no water-body-specific data exists.
 2. The section label based on water body type.
 3. The appropriate tile set based on type + available data.
-4. The water quality sub-row if `current.waterQuality` has any metrics.
+4. The water quality sub-row if `conditions.waterQuality` has any metrics.
 
 ## Streamflow Chart
 
@@ -121,11 +121,11 @@ The `StreamflowChart` component renders only when `flowHistory` has data. It is 
 
 ### Frontend Types (`app/src/lib/types.ts`)
 
-Extend `CurrentConditions`:
+Extend `ConditionsResponse` with top-level fields (these are NOT inside `current` -- the API returns them at the top level of the response alongside `score`, `rating`, etc.):
 
 ```typescript
-interface CurrentConditions {
-  // ... existing fields ...
+interface ConditionsResponse {
+  // ... existing fields (score, rating, current, etc.) ...
   riverStageFt?: number | null;
   stageContext?: {
     label: string;       // "Normal for April", "High for April", etc.
@@ -168,13 +168,9 @@ interface ForecastResponse {
 
 ### API Response Changes (`api/src/services/conditions.ts`)
 
-**Include existing water data in the response.** The API already computes reservoir, waterQuality, petSafety, and riverStageFt but some fields are not included in the response object sent to clients. Ensure all fields are present:
+**Include existing water data in the response.** The API already computes and conditionally includes `reservoir`, `waterQuality`, `petSafety`, and `riverStageFt` as top-level fields on `ConditionsResponse`. Verify all are present. The one missing field is:
 
-- `reservoir` object (storage, elevation, inflow, outflow, releases)
-- `waterQuality` object (turbidity, DO, pH, conductivity)
-- `petSafety` object (rating, reasons)
-- `riverStageFt` (already included)
-- `reservoirCapacityAf` from the water body record
+- `reservoirCapacityAf` -- currently hardcoded as `null` with a TODO comment at line 577 of conditions.ts. Must be loaded from the `waterBodies` table (`reservoir_capacity_af` column) for the reservoir level gauge to show a percentage. This is already populated in the DB for Folsom (977,000 AF) and Natoma (8,760 AF).
 
 **Add `stageContext`** to the response when river stage and baseline data are available. Computed from the stage baseline:
 
@@ -207,13 +203,12 @@ If no flow data is available, omit `flowHistory` from the response.
 **Props:**
 ```typescript
 interface WaterConditionsTilesProps {
-  current: CurrentConditions;
+  conditions: ConditionsResponse;
   waterBodyType?: string;
-  reservoirCapacityAf?: number | null;
 }
 ```
 
-**Responsibility:** Renders the water-body-specific tile section below the weather grid. Handles all conditional rendering logic internally.
+**Responsibility:** Renders the water-body-specific tile section below the weather grid. Reads `reservoir`, `waterQuality`, `petSafety`, `riverStageFt`, `stageContext`, and `reservoirCapacityAf` from the top-level conditions response. Handles all conditional rendering logic internally.
 
 ### `WaterQualityRow.tsx`
 
