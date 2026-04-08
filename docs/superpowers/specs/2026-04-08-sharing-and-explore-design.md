@@ -41,7 +41,9 @@ Share link → paddleconditions.com/spot/lake-tahoe
 
 ### Key Rule
 
-Public endpoints never trigger data fetches from external sources (NOAA, USGS, etc.). They read from the existing `water_body_conditions` cache. Water bodies with `user_count = 0` have no cached data and show a "No data" state with a CTA to subscribe.
+Public endpoints never trigger data fetches from external sources (NOAA, USGS, etc.). They read from the existing `water_body_conditions` cache, which stores raw JSON blobs (`weather`, `water`, `aqi`). Scores and ratings are computed at request time by running `computePaddleScore()` against the cached data -- this is fast (no I/O) but requires an activity profile. Public pages use the **SUP recreational** profile as a general-purpose default, labeled "Typical paddle score." Premium users see personalized scores based on their chosen activity and skill level.
+
+Water bodies with `user_count = 0` have no cached data and show a "No data" state with a CTA to subscribe.
 
 ## Spot Page (`/spot/:slug`)
 
@@ -144,7 +146,7 @@ Two new public endpoints under `/public/` prefix. No auth required, rate-limited
 
 ### `GET /public/spot/:slug`
 
-Fetch a water body and its cached conditions by slug.
+Fetch a water body and its cached conditions by slug. Reads raw cached JSON from `water_body_conditions` (weather, water, aqi columns), then computes score/rating at request time using the SUP recreational profile via `computePaddleScore()`.
 
 **Response:**
 ```json
@@ -185,7 +187,7 @@ Fetch a water body and its cached conditions by slug.
 
 ### `GET /public/spots/nearby`
 
-Find water bodies near a geographic point.
+Find water bodies near a geographic point. For spots with cached conditions, computes score/rating using the SUP recreational profile.
 
 **Query params:**
 - `lat` (required) -- latitude
@@ -254,6 +256,29 @@ This aligns with the refresh tier schedule -- data changes at most every 6 hours
 ## Navigation
 
 Add "Explore" link to the website navigation bar, linking to `/explore`. This appears alongside Features, Docs, and the Get Premium CTA.
+
+## Infrastructure Prerequisites
+
+### Passenger Setup for Website
+
+The website is currently pure static files served by Apache. SSR requires a persistent Node process via Passenger:
+
+1. **cPanel:** Create a Node.js application for `paddleconditions.com` (same pattern as the API)
+2. **package.json:** Add `"start": "node ./dist/server/entry.mjs"` script
+3. **Deploy workflow:** Add Passenger restart step (`touch tmp/restart.txt`) after rsync
+4. **Astro config:** Switch from `output: 'static'` to hybrid mode with `@astrojs/node` adapter
+
+Passenger is already proven on this cPanel account (used by the API). The setup is straightforward.
+
+## Known Limitations
+
+### California-Only Water Body Data
+
+The `water_bodies` table contains ~4,100 entries imported from the NHD California dataset. The explore page will show no results for users outside California. This is acceptable for initial launch since the user base is CA-focused, but national expansion requires running the NHD import for additional states. The import script (`_todo/20260318-water-body-database.md`) documents the process.
+
+### No Spatial Index
+
+The water_bodies table has no spatial index on lat/lng. At ~4K rows, Haversine queries via full table scan are fast enough. If the dataset grows past 50K rows (national expansion), add a spatial index or use bounding-box pre-filtering.
 
 ## Testing
 
