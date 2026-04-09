@@ -19,6 +19,7 @@
 - [x] Linked accounts (12 tasks, 513 tests, social login + account linking + password management)
 - [x] End-to-end testing (17 Playwright tests, 4 suites)
 - [x] Location-based sharing & nearby spots (12 tasks, 533 API tests, deployed — spec at `docs/superpowers/specs/2026-04-08-sharing-and-explore-design.md`, plan at `docs/superpowers/plans/2026-04-08-sharing-and-explore.md`)
+- [x] SEO & discovery (15 tasks, deployed — spec at `docs/superpowers/specs/2026-04-08-seo-discovery-design.md`, plan at `docs/superpowers/plans/2026-04-08-seo-discovery.md`)
 
 ## Remaining Tasks
 
@@ -66,7 +67,12 @@
 - **Changelog lives on website repo**: `website/data/changelog.json` covers ALL repos (api, app, website, HA). Must update with every change. CLAUDE.md enforces this on /handoff too.
 - **Chart X-axis ticks**: Use `getEvenTicks()` helper with Recharts `ticks` prop for even 2-hour spacing. All data points kept for tooltip interaction.
 - **SSH PQ warnings are noise**: OpenSSH 9.x warns "not using post-quantum key exchange" when connecting to cPanel server. Safe to ignore — server just needs upgrading (hosting provider's responsibility). Auth failures (`Exit code 5/255`) are separate issues (key/password problems), investigate only if deploys fail.
-- **Google Search Console**: Verified via Cloudflare DNS TXT record on paddleconditions.com. Sitemap at `/sitemap-index.xml`. App subdomain not worth indexing (gated SPA).
+- **Google Search Console**: Verified via Cloudflare DNS TXT record on paddleconditions.com. Sitemap at `/sitemap-index.xml` (includes `sitemap-spots.xml` via `customSitemaps`). Sitemap submitted 2026-04-08. App subdomain not worth indexing (gated SPA).
+- **OG images are pre-generated, not in git**: Run `npx tsx scripts/generate-og-images.ts` from `website/`. Output goes to `website/public/og/` (gitignored). Must rsync to server separately after deploy: `rsync -avz -e "ssh -i ~/.ssh/paddleconditions_prod -p 11208" website/public/og/ devsac@104.255.174.113:/home/devsac/public_html/paddleconditions.com/client/og/`
+- **Google Fonts URL returns HTML, not font**: `fonts.gstatic.com` URLs redirect to HTML. Download Inter from GitHub releases instead: `https://github.com/rsms/inter/releases/`. Use TTF format for Satori (not woff/woff2).
+- **`popularity` is composite**: The `water_bodies.popularity` column is incremented by spot page views AND user saves. No separate `view_count` needed. Sort browse pages by this field.
+- **Astro hybrid mode**: `output: 'static'` in Astro 6 is actually hybrid. Pages default to prerender. Use `export const prerender = false` to opt into SSR. Spot pages and sitemap use SSR; browse pages are static via `getStaticPaths`.
+- **@astrojs/sitemap customSitemaps**: Version 3.7.1 supports `customSitemaps: string[]` to include external sitemaps in the generated index. No need for custom index endpoints.
 - **water_body_conditions has 4 JSON columns**: weather, water, aqi, forecast. Each stored separately for clean data boundaries. AQI was initially packed into weather as an envelope `{weatherData, aqi}` — refactored to its own column.
 - **Refresh tiers are user-count based**: 0 users = dormant, 1-2 = 24h, 3-5 = 12h, 6+ = 6h. `user_count` is DISTINCT users, not location rows. Nightly reconciliation corrects drift.
 - **cron_locks table for multi-process safety**: Passenger spawns multiple workers. Only one runs the refresh job. Lock uses 10-min self-healing expiry via UPDATE with timestamp check.
@@ -111,27 +117,25 @@
 ## Session Notes — 2026-04-09
 
 ### Completed
-- **Sharing & Explore feature** (full design + implementation + deploy):
-  - Spec: `docs/superpowers/specs/2026-04-08-sharing-and-explore-design.md`
-  - Plan: `docs/superpowers/plans/2026-04-08-sharing-and-explore.md`
-  - API: 2 public endpoints (`GET /public/spot/:slug`, `GET /public/spots/nearby`), `computePublicConditions` service (SUP recreational scoring), `slug` column on `water_bodies` (4106 backfilled), `waterBodySlug` in sync response. 533 total tests.
-  - App: `ShareButton` component on detail page (Web Share API + clipboard fallback), `waterBodySlug` on Location type.
-  - Website: Hybrid SSR via `@astrojs/node` + Passenger, `/spot/[slug].astro` SSR page, `/explore.astro` with Leaflet map React island, `ExploreMap.tsx`, `ScoreCircle.astro`, `ConditionsGrid.astro`, `SpotCard.astro`. Explore link added to nav.
-  - Deploy: Passenger registered via UAPI, SSL Apache config copied via WHM root terminal, `app.js` entry point for Passenger, `node_modules` deployed alongside build.
-- **Bug fixes during deploy**: pre-existing `httpErrors` TS error in auth/me.ts, migration journal missing entry for 0010, water temp float display (added Math.round), OG URL showing localhost (added explicit url to openGraph config), `app.js` deleted by rsync --delete (now created in dist before deploy)
+- **SEO & Discovery** (full design + review + implementation + deploy):
+  - Spec: `docs/superpowers/specs/2026-04-08-seo-discovery-design.md`
+  - Plan: `docs/superpowers/plans/2026-04-08-seo-discovery.md`
+  - API: `GET /public/spots/directory` endpoint (all water bodies grouped by state), `us-states.ts` mapping utility, `description` TEXT column migration, popularity increment on spot views. 540 total tests.
+  - Website: `/spots` browse index (state grid, popular spots, search filter), `/spots/[state]` static pages (type grouping, filter buttons), `/sitemap-spots.xml` SSR endpoint (4108 URLs), `SpotJsonLd` structured data, `NearbySpots` component, enhanced spot page (JSON-LD, description, nearby spots, OG image), cross-link between `/explore` and `/spots`, OG image batch script (Satori + Sharp, 4106 images generated).
+  - Deploy: Both API and website deployed. OG images rsynced to production. Sitemap submitted to Google Search Console.
+- **Review findings fixed**: non-mutating sort for topSpots, aria-label on search input
 
 ### Known Limitations
-- **California-only water body data**: ~4100 water bodies from NHD CA import. Explore page is empty outside CA.
+- **California-only water body data**: ~4100 water bodies from NHD CA import. Browse/explore pages empty outside CA.
 - **No spatial index**: Haversine queries do full table scan. Fine at 4K rows, needs index at 50K+.
-- **Public scores use SUP recreational profile**: Not personalized. Labeled "Typical paddle score."
-- **Popup-only OAuth**: No redirect fallback if popup is blocked.
-- **Apple displayName**: Only available on first authorization.
-- **Offline mutations don't queue**: Fire once and throw on failure.
-- **E2e tests run serial** (`workers: 1`): Rate limiter bug means parallel workers fail.
+- **Browse state pages require API at build time**: `getStaticPaths` fetches from directory endpoint. If API is down during build, state pages won't generate.
+- **OG images must be deployed separately**: Not in git. Must run generation script + rsync after adding new water bodies.
+- **No `<lastmod>` in sitemap**: Google prefers lastmod over changefreq/priority. Could add water body updatedAt in future.
 
 ### Next Steps
+- Write rich descriptions for top-popularity spots (manual content for best SEO value)
+- Expand water body database to more states (NHD import script needs parameterization)
 - Dashboard screenshots in docs are stale (still show old design)
 - Consider CI integration for e2e tests (currently local only)
 - Fix form label accessibility (`htmlFor`/`id` on Login, Register, ForgotPassword forms)
-- Expand water body database to more states (NHD import script needs parameterization)
-- Add Leaflet map to spot page (currently shows "Map coming soon" placeholder)
+- Add slug validation schema to spot API endpoint (Fastify JSON Schema)
