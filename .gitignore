@@ -17,13 +17,14 @@ frontend/dist/
 .DS_Store
 Thumbs.db
 
-# Website is a separate repo (michaelkahn/paddle-conditions-website)
+# Sub-repos are independent git repos
 website/
-
-# API is a separate repo (michaelkahn/paddle-conditions-api)
 api/
-
-# App is a separate repo (michaelkahn/paddle-conditions-app)
 app/
+
+# Project-wide files (not part of HACS)
+_todo/
+_done/
+docs/
 .worktrees/
 .env.secrets
