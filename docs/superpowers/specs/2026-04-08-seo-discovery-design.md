@@ -20,6 +20,15 @@ Make spot pages discoverable by search engines and shareable on social media. Ad
 - **Filter controls** to show/hide types within the page (client-side toggle, no page reload).
 - States are identified by a URL-safe slug (e.g., `california`, `new-york`). Map state names to slugs at build time.
 
+### Relationship to `/explore`
+
+The existing `/explore` page is an interactive map-based discovery tool (React component, client-rendered). It serves a different purpose than `/spots`:
+
+- **`/spots`** is the SEO/text browse page. Static, crawlable, organized by state and type. Designed for search engine discovery and users who want to browse by location.
+- **`/explore`** is the interactive map. Client-rendered, not crawlable. Designed for users who want to visually find spots near a location.
+
+Cross-link between them: `/spots` includes a "Or explore the map" link to `/explore`. `/explore` includes a "Browse all spots" link to `/spots`.
+
 ### Data Source
 
 New API endpoint: `GET /public/spots/directory`
@@ -87,9 +96,19 @@ Queries the API for all water body slugs and emits a sitemap XML file:
 
 ### Sitemap Index Update
 
-The existing `@astrojs/sitemap` generates `sitemap-index.xml` for static pages. Add a reference to `sitemap-spots.xml` in a custom sitemap index, or replace the default with a hand-written index that includes both.
+The existing `@astrojs/sitemap` (v3.7.1) generates `sitemap-index.xml` at build time. Use the plugin's `customSitemaps` option to include the dynamic spots sitemap in that index. No custom index endpoint needed.
 
-Approach: Create a custom `sitemap-index.xml.ts` SSR endpoint that references both the auto-generated static sitemap and the dynamic spots sitemap. Update `robots.txt` to point to this new index.
+```js
+// astro.config.mjs
+sitemap({
+  filter: (page) => !page.includes('/404'),
+  customSitemaps: ['https://paddleconditions.com/sitemap-spots.xml'],
+})
+```
+
+This produces a `sitemap-index.xml` referencing both `sitemap-0.xml` (static pages) and `sitemap-spots.xml` (dynamic spots). No changes to `robots.txt` needed since it already points to `sitemap-index.xml`.
+
+The `sitemap-spots.xml.ts` endpoint must export `export const prerender = false` so it is server-rendered on each request rather than pre-rendered at build time.
 
 ## 3. Spot Page Enhancements
 
@@ -113,7 +132,7 @@ Extend for spots with station data:
 
 The spot page displays `description` if set, otherwise the auto-generated text. Manual descriptions take priority.
 
-**Content strategy:** Write rich descriptions for the top spots by popularity/view count first. Include access info, best activities (SUP, kayak, canoe), best seasons, and any notable features.
+**Content strategy:** Write rich descriptions for the top spots by popularity first. Include access info, best activities (SUP, kayak, canoe), best seasons, and any notable features.
 
 ### Nearby Spots
 
@@ -125,21 +144,20 @@ This creates internal linking between spot pages, which helps both users and cra
 
 ### Popularity Tracking
 
-**Database change:** Add a `view_count` INT column to `water_bodies`, default 0.
+The `water_bodies` table already has a `popularity` INT UNSIGNED column. This is a composite signal: it gets incremented both by page views and by users saving a water body. No new column needed.
 
-```sql
-ALTER TABLE water_bodies ADD COLUMN view_count INT UNSIGNED NOT NULL DEFAULT 0;
+**Increment on page view:** The spot API endpoint (`/public/spot/:slug`) increments `popularity` on each request. Use a non-blocking increment with error handling to avoid unhandled promise rejections:
+
+```ts
+app.dbPool.execute(
+  'UPDATE water_bodies SET popularity = popularity + 1 WHERE slug = ?',
+  [slug],
+).catch(err => request.log.error(err, 'popularity increment failed'));
 ```
 
-**Increment strategy:** The spot API endpoint (`/public/spot/:slug`) increments `view_count` on each request. Use a fire-and-forget UPDATE (don't block the response). Acceptable to lose some counts under load.
+This does not block the response. Acceptable to lose some counts under load. If the volume gets high enough to matter, batch the increments later.
 
-```sql
-UPDATE water_bodies SET view_count = view_count + 1 WHERE slug = ?;
-```
-
-This is simple and good enough. If the volume gets high enough to matter, batch the increments later.
-
-**Usage:** Sort the "Popular Spots" section on `/spots` by `view_count` (or a blend of `view_count` and `popularity`). Prioritize writing manual descriptions for high-view-count spots.
+**Usage:** Sort the "Popular Spots" section on `/spots` by `popularity`. Prioritize writing manual descriptions for high-popularity spots.
 
 ### Structured Data (JSON-LD)
 
@@ -215,14 +233,13 @@ Bundle 1-2 font files (e.g., Inter Bold, Inter Regular) in the website scripts d
 ### Modified Endpoint
 
 **`GET /public/spot/:slug`**
-- Add: fire-and-forget `view_count` increment.
+- Add: non-blocking `popularity` increment with `.catch()` error handling.
 - Add: include `description` field in response.
 - No breaking changes to existing response shape.
 
 ### Database Migrations
 
 1. `ALTER TABLE water_bodies ADD COLUMN description TEXT DEFAULT NULL;`
-2. `ALTER TABLE water_bodies ADD COLUMN view_count INT UNSIGNED NOT NULL DEFAULT 0;`
 
 ## 6. SEO Metadata Summary
 
@@ -235,26 +252,24 @@ Bundle 1-2 font files (e.g., Inter Bold, Inter Regular) in the website scripts d
 ## 7. File Changes Summary
 
 ### API (`api/`)
-- `src/routes/public/spot.ts` - Add view_count increment, include description
+- `src/routes/public/spot.ts` - Add popularity increment, include description
 - `src/routes/public/directory.ts` - New endpoint
-- `src/db/migrations/XXXX_add_description_view_count.sql` - Schema change
+- `src/db/migrations/XXXX_add_description.sql` - Schema change
 
 ### Website (`website/`)
 - `src/pages/spots/index.astro` - New browse index page
 - `src/pages/spots/[state].astro` - New state page (static)
-- `src/pages/sitemap-spots.xml.ts` - Dynamic sitemap
-- `src/pages/sitemap-index.xml.ts` - Custom sitemap index
+- `src/pages/sitemap-spots.xml.ts` - Dynamic sitemap (prerender = false)
 - `src/pages/spot/[slug].astro` - Add structured data, nearby spots, description section, OG image
 - `src/components/SpotJsonLd.astro` - New structured data component
 - `src/components/NearbySpots.astro` - New nearby spots component
 - `scripts/generate-og-images.ts` - New OG image batch script
-- `public/robots.txt` - Update sitemap URL if index changes
-- `astro.config.mjs` - May need adjustment for custom sitemap index
+- `astro.config.mjs` - Add customSitemaps to sitemap plugin config
 
 ## 8. Out of Scope
 
 - Search engine submission (Google Search Console) - manual step after deployment.
-- Analytics integration beyond view_count (Google Analytics, etc.).
+- Analytics integration beyond popularity increment (Google Analytics, etc.).
 - Spot page comments or user-generated content.
 - Canonical URL handling for potential duplicate content (not an issue with slug-based URLs).
 - AMP pages.
