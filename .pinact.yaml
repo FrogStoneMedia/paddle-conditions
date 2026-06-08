@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/suzuki-shunsuke/pinact/refs/heads/main/json-schema/pinact.json
+# pinact - https://github.com/suzuki-shunsuke/pinact
+version: 3
+# Cooldown: don't adopt a GitHub Action version published in the last 10 days
+# (applies during `pinact run --update`). Pin refs to SHAs with `pinact run`.
+min_age:
+  value: 10
