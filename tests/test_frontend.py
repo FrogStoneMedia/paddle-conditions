@@ -9,7 +9,9 @@ from homeassistant.loader import async_get_integration
 from homeassistant.setup import async_setup_component
 
 from custom_components.paddle_conditions.const import DOMAIN
-from custom_components.paddle_conditions.frontend import CARD_FILES, URL_BASE
+from custom_components.paddle_conditions.frontend import BUNDLE, LEGACY_FILES, URL_BASE
+
+CARD_FILES = (BUNDLE,)
 
 pytestmark = pytest.mark.usefixtures("enable_custom_integrations")
 
@@ -87,4 +89,28 @@ async def test_card_files_are_served(hass: HomeAssistant, hass_client):
     for name in CARD_FILES:
         resp = await client.get(f"{URL_BASE}/{name}")
         assert resp.status == 200
-        assert "customElements.define" in await resp.text()
+        body = await resp.text()
+        for card in ("paddle-score-card", "paddle-spots-card", "paddle-forecast-card", "paddle-history-card"):
+            assert card in body
+
+
+async def test_legacy_per_card_resources_are_replaced_by_the_bundle(hass: HomeAssistant, hass_storage):
+    """1.x registered paddle-score-card.js and paddle-spots-card.js separately; 2.0 serves one bundle."""
+    hass_storage["lovelace_resources"] = {
+        "version": 1,
+        "minor_version": 1,
+        "key": "lovelace_resources",
+        "data": {
+            "items": [
+                {"id": f"old{i}", "type": "module", "url": f"{URL_BASE}/{name}?v=1.0.0"}
+                for i, name in enumerate(LEGACY_FILES)
+            ]
+            + [{"id": "mine", "type": "module", "url": "/local/my-card.js"}]
+        },
+    }
+
+    assert await async_setup_component(hass, DOMAIN, {})
+    await hass.async_block_till_done()
+    version = await _version(hass)
+
+    assert await _resource_urls(hass) == sorted([f"{URL_BASE}/{BUNDLE}?v={version}", "/local/my-card.js"])

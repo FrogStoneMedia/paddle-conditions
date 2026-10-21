@@ -54,9 +54,10 @@ I built this because I was tired of checking four different apps before every pa
 - Supports lakes, rivers, and bays/oceans with the right data sources for each
 
 ### Bundled dashboard cards
-Custom Lovelace cards ship with the integration. No extra HACS card downloads needed.
-- **`paddle-score-card`**: all-in-one card with hero score, Go/Caution/No-go rating, best time to paddle, factor grid with tap-to-expand hourly forecasts, and 3-hour forecast timeline
-- **`paddle-spots-card`**: multi-location comparison with color-coded score badges for quick spot selection
+Six Lovelace cards ship with the integration in one bundle. No extra HACS card downloads needed. They show up in the card picker (and are suggested when you pick a Paddle Score sensor), have visual editors, size themselves in the sections view, and follow your units, language, time zone and light or dark theme.
+- **`paddle-score-card`**: all-in-one card with hero score, Go/Caution/No-go rating, best time to paddle, factor grid with tap-to-expand hourly forecasts, a 3-hour forecast strip, and a details view with hourly charts
+- **`paddle-spots-card`**: every spot's score and rating at a glance
+- **`paddle-factors-card`**, **`paddle-forecast-card`**, **`paddle-chart-card`**, **`paddle-history-card`**: the factor breakdown, a forecast table, a layered 24-hour chart, and score history from the recorder
 
 <p align="center">
   <img src="docs/images/forecast-cards.png" alt="Forecast timeline and multi-location view" width="300"/>
@@ -65,11 +66,13 @@ Custom Lovelace cards ship with the integration. No extra HACS card downloads ne
 </p>
 
 ### Accessibility
-All bundled cards follow WCAG 2.1 AA guidelines:
-- **Keyboard navigation** on every interactive element (Enter/Space to activate, Escape to close overlays)
-- **ARIA labels and roles** for screen readers, including progress bars, toggle states, and dialog overlays
-- **Focus indicators** visible on all focusable elements
-- **Respects `prefers-reduced-motion`** to disable animations for users with vestibular sensitivities
+The cards are built to WCAG 2.2 AA and checked with axe-core in light and dark mode:
+- **Real buttons** everywhere, so keyboard and switch access work without extra handling
+- **A proper modal** for the details view: focus moves into it, stays there, and returns when it closes; Escape always closes it
+- **Text alternatives for every chart**: a spoken summary plus the hourly values as a table for screen readers
+- **Status announcements** when history loads or fails
+- **Contrast of at least 4.5:1** for every rating colour on every surface, and the rating is always also written out
+- **Respects `prefers-reduced-motion`**, including chart animations
 - **Color contrast** meets AA ratios. Ratings include text labels alongside color so no information is conveyed by color alone.
 
 ### Caching and freshness
@@ -214,19 +217,27 @@ Weights are customizable. Profiles provide good defaults: Racing tolerates more 
 
 ## Dashboard
 
-The integration bundles two custom Lovelace cards and a service action that generates a complete dashboard config for all your locations.
+The integration bundles six custom Lovelace cards and an action that generates a complete dashboard config for all your locations. Every card takes the location's Paddle Score sensor and finds that location's other sensors itself, even if you renamed them.
 
 ### Cards
 
 **`paddle-score-card`**: The main card for each location. Shows:
 - Hero section with paddle score, Go/Caution/No-go rating, and date
-- Best time to paddle (filtered to daylight hours, at least 2 hours before sunset)
+- Best time to paddle (using the spot's own sunrise and sunset, ending at least 2 hours before sunset)
 - Factor grid (wind, AQI, temperature, UV, visibility, precipitation) with score bars
 - Tap any factor tile to expand hourly forecasts (sunrise-1h to sunset+1h)
-- Tap the score header to open a detail overlay with stacked SVG line charts for paddle score, wind speed/gusts, air/water temperature, UV index, and precipitation, all on a sunrise-to-sunset timeline
+- Tap the score header to open a details view with hourly charts for paddle score, wind speed and gusts, air and water temperature, UV index, and rain chance, on a sunrise-to-sunset timeline
 - 3-hour forecast timeline with per-block scores, wind, and temperature
 
-**`paddle-spots-card`**: Multi-location comparison card with color-coded score badges. Useful when you have several spots and want to see at a glance which one is best today.
+**`paddle-spots-card`**: Every spot's score and rating. Tap one for its details. With no `entities` set, it shows all your locations.
+
+**`paddle-factors-card`**: Each scoring factor with its reading and sub-score. Tap a row for that sensor's history.
+
+**`paddle-forecast-card`**: The next 24 hours in 3-hour blocks, with the best window highlighted.
+
+**`paddle-chart-card`**: Score over the next 24 hours, with optional wind, temperature, UV and rain layers.
+
+**`paddle-history-card`**: Score history from the recorder over 7, 30 or 90 days, with average, best and Go-day counts.
 
 ### Getting the dashboard
 
@@ -293,7 +304,6 @@ automation:
 - **Tides aren't scored yet.** Bay and ocean locations score without a tide factor.
 - **USGS without a key refreshes hourly.** Keyless requests share a small per-network quota. Add a free key under **Configure** for updates every 15 to 20 minutes.
 - **US-centric water data.** USGS and NOAA stations only cover the United States. Weather and air quality work anywhere Open-Meteo does.
-- **Forecast scores leave out air quality and visibility.** Open-Meteo's hourly forecast for those isn't used yet, so forecast blocks score wind, gusts, temperature, UV and precipitation.
 
 ---
 
@@ -328,7 +338,7 @@ automation:
 
 ### Cards not appearing or showing stale data
 - Cards register when the integration loads. If they don't show in the card picker, restart HA.
-- If cards show old data after an update, clear your browser cache (the JS URL includes a version parameter, but aggressive caching may require a hard refresh).
+- After an update, the card URL's version changes, so browsers fetch the new cards. If you still see the old ones, reload the page; in the companion app, use **Settings > Companion app > Debugging > Reset frontend cache**.
 - Check the browser console (F12) for JavaScript errors.
 
 ### Cards show "Configuration error" on startup

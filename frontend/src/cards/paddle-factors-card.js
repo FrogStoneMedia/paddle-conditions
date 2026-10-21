@@ -1,215 +1,130 @@
-import { colorForScore, FACTOR_META, FACTOR_SENSOR_SUFFIX, fireMoreInfo, makeInteractive } from "../utils.js";
-import { CARD_STYLES } from "../styles/theme.js";
+// Paddle Factors card: each scoring factor with its reading and sub-score.
 
-const ALL_FACTORS = Object.keys(FACTOR_META);
+import { PaddleLocation, scoreEntities, signatureChanged, DOMAIN } from "../lib/entities.js";
+import { formatState } from "../lib/units.js";
+import { applyTheme, ratingForScore, ratingVar } from "../lib/theme.js";
+import { el, button } from "../lib/dom.js";
 
-const STYLES = `
-  ${CARD_STYLES}
-  .factors-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  .factor-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    cursor: pointer;
-    padding: 4px 0;
-    border-radius: 8px;
-    transition: background 0.15s ease;
-  }
-  .factor-row:hover {
-    background: var(--secondary-background-color, rgba(0,0,0,0.04));
-  }
-  .factor-label {
-    width: 90px;
-    font-size: 0.85em;
-    font-weight: 500;
-    flex-shrink: 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .factor-value {
-    width: 60px;
-    font-size: 0.8em;
-    color: var(--secondary-text-color, #757575);
-    flex-shrink: 0;
-    text-align: right;
-  }
-  .factor-bar {
-    flex: 1;
-    min-width: 40px;
-  }
-  .factor-score {
-    width: 32px;
-    font-size: 0.85em;
-    font-weight: 600;
-    text-align: right;
-    flex-shrink: 0;
-  }
-`;
+const FACTORS = [
+  { key: "wind_speed", label: "Wind", sensor: "wind_speed", icon: "mdi:weather-windy" },
+  { key: "wind_gusts", label: "Gusts", sensor: "wind_gusts", icon: "mdi:weather-windy-variant" },
+  { key: "air_quality", label: "Air quality", sensor: "aqi", icon: "mdi:air-filter" },
+  { key: "temperature", label: "Temperature", sensor: "air_temp", icon: "mdi:thermometer" },
+  { key: "uv_index", label: "UV index", sensor: "uv_index", icon: "mdi:white-balance-sunny" },
+  { key: "visibility", label: "Visibility", sensor: "visibility", icon: "mdi:eye-outline" },
+  { key: "precipitation", label: "Rain chance", sensor: "precipitation", icon: "mdi:weather-rainy" },
+  { key: "streamflow", label: "Streamflow", sensor: "streamflow", icon: "mdi:waves" },
+];
 
 class PaddleFactorsCard extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
-    this._config = {};
   }
 
-  setConfig(config) {
-    if (!config.entity) {
-      throw new Error("Please define an entity");
-    }
-    this._config = {
-      show_factors: ALL_FACTORS,
-      ...config,
+  static getStubConfig(hass) {
+    return { entity: scoreEntities(hass)[0] || "" };
+  }
+
+  static getConfigForm() {
+    return {
+      schema: [
+        { name: "entity", required: true, selector: { entity: { filter: [{ integration: DOMAIN, domain: "sensor" }] } } },
+        { name: "name", selector: { text: {} } },
+      ],
+      computeLabel: (s) => ({ entity: "Paddle Score sensor", name: "Title" })[s.name],
     };
   }
 
+  setConfig(config) {
+    if (!config?.entity) throw new Error("Choose a Paddle Score sensor");
+    this._config = config;
+    this._location = null;
+    this._signature = null;
+    if (this._hass) this.hass = this._hass; // Rebuild the location and render now.
+  }
+
   set hass(hass) {
-    const entity = hass.states[this._config.entity];
-    const newState = entity ? `${entity.state}|${JSON.stringify(entity.attributes)}` : "";
-    if (this._lastState === newState) return;
-    this._lastState = newState;
     this._hass = hass;
+    if (!this._config) return;
+    if (!this._location || this._location.hass.entities !== hass.entities) this._location = new PaddleLocation(hass, this._config.entity);
+    this._location.hass = hass;
+    const sig = this._location.signature(hass);
+    if (!signatureChanged(this._signature, sig) && this._dark === Boolean(hass.themes?.darkMode)) return;
+    this._signature = sig;
+    this._dark = Boolean(hass.themes?.darkMode);
     this._render();
   }
 
   getCardSize() {
-    const factors = this._config.show_factors || ALL_FACTORS;
-    return 1 + factors.length;
+    return 1 + FACTORS.length;
   }
 
-  static getStubConfig() {
-    return { entity: "" };
-  }
-
-  static getConfigElement() {
-    return document.createElement("paddle-factors-editor");
-  }
-
-  _getSensorEntityId(factorKey) {
-    const scoreEntityId = this._config.entity;
-    const suffix = FACTOR_SENSOR_SUFFIX[factorKey];
-    if (!suffix) return null;
-    const result = scoreEntityId.replace(/_score$/, `_${suffix}`);
-    if (result === scoreEntityId) {
-      console.warn(`[paddle-factors-card] Entity "${scoreEntityId}" does not end in "_score" — cannot derive sensor for ${factorKey}`);
-      return null;
-    }
-    return result;
+  getGridOptions() {
+    return { columns: 6, min_columns: 4, rows: "auto" };
   }
 
   _render() {
-    const root = this.shadowRoot;
-    const entity = this._hass.states[this._config.entity];
-
-    if (!entity) {
-      root.textContent = "";
-      const style = document.createElement("style");
-      style.textContent = STYLES;
-      const card = document.createElement("ha-card");
-      const empty = document.createElement("div");
-      empty.className = "empty-state";
-      empty.textContent = `Entity not found: ${this._config.entity}`;
-      card.appendChild(empty);
-      root.append(style, card);
-      return;
-    }
-
-    const factors = entity.attributes.factors || {};
-    const visibleFactors = this._config.show_factors;
-    const name = this._config.name || "Paddle Factors";
-
-    root.textContent = "";
-
-    const style = document.createElement("style");
-    style.textContent = STYLES;
-
-    const card = document.createElement("ha-card");
-
-    const header = document.createElement("div");
-    header.className = "card-header";
-    header.textContent = name;
-    card.appendChild(header);
-
-    const list = document.createElement("div");
-    list.className = "factors-list";
-    list.setAttribute("role", "list");
-    list.setAttribute("aria-label", "Paddle condition factors");
-
-    for (const factorKey of visibleFactors) {
-      const meta = FACTOR_META[factorKey];
-      if (!meta) continue;
-
-      const score = factors[factorKey];
-      const scoreNum = score != null ? Number(score) : null;
-      const color = colorForScore(scoreNum);
-      const sensorEntityId = this._getSensorEntityId(factorKey);
-      const sensorEntity = sensorEntityId ? this._hass.states[sensorEntityId] : null;
-
-      const rawVal = sensorEntity && sensorEntity.state != null && sensorEntity.state !== "unavailable" && sensorEntity.state !== "unknown"
-        ? sensorEntity.state : null;
-      const valueText = rawVal ? (meta.unit ? `${rawVal} ${meta.unit}` : rawVal) : "unavailable";
-      const ariaText = `${meta.label}: ${valueText}, score ${scoreNum != null ? scoreNum : "unknown"} out of 100`;
-
-      const row = document.createElement("div");
-      row.className = "factor-row";
-      row.setAttribute("role", "listitem");
-      if (sensorEntityId) {
-        makeInteractive(row, () => fireMoreInfo(this, sensorEntityId), ariaText);
+    if (!this._hass || !this._location) return;
+    applyTheme(this, this._hass);
+    const score = this._location.state("paddle_score");
+    const content = [el("h2", { className: "title", text: this._config.name || "Scoring factors" })];
+    if (!score) {
+      content.push(el("p", { className: "empty", text: `Sensor not found: ${this._config.entity}` }));
+    } else {
+      const factors = score.attributes?.factors || {};
+      const list = el("ul", { className: "factors" });
+      for (const f of FACTORS) {
+        const sub = factors[f.key];
+        if (sub == null) continue;
+        const sensorId = this._location.id(f.sensor);
+        const value = formatState(this._hass, this._location.state(f.sensor));
+        const color = ratingVar(ratingForScore(sub));
+        list.append(
+          el(
+            "li",
+            {},
+            button(
+              {
+                className: "factor",
+                "aria-label": `${f.label}: ${value}, score ${sub} out of 100. Show details.`,
+                onClick: () => sensorId && this.dispatchEvent(new CustomEvent("hass-more-info", { bubbles: true, composed: true, detail: { entityId: sensorId } })),
+              },
+              [
+                el("ha-icon", { icon: f.icon, "aria-hidden": "true", style: { color } }),
+                el("span", { className: "label", text: f.label }),
+                el("span", { className: "value", text: value }),
+                el("span", { className: "bar", "aria-hidden": "true" }, el("span", { style: { width: `${sub}%`, background: color } })),
+                el("span", { className: "sub", style: { color }, text: String(sub) }),
+              ],
+            ),
+          ),
+        );
       }
-
-      // Icon circle
-      const iconCircle = document.createElement("div");
-      iconCircle.className = "icon-circle";
-      iconCircle.style.background = color;
-      iconCircle.setAttribute("aria-hidden", "true");
-      const haIcon = document.createElement("ha-icon");
-      haIcon.setAttribute("icon", meta.icon);
-      iconCircle.appendChild(haIcon);
-
-      // Label
-      const label = document.createElement("div");
-      label.className = "factor-label";
-      label.textContent = meta.label;
-
-      // Raw value + unit
-      const value = document.createElement("div");
-      value.className = "factor-value";
-      value.textContent = rawVal ? (meta.unit ? `${rawVal} ${meta.unit}` : rawVal) : "--";
-
-      // Progress bar
-      const barOuter = document.createElement("div");
-      barOuter.className = "progress-bar factor-bar";
-      barOuter.setAttribute("role", "progressbar");
-      barOuter.setAttribute("aria-valuenow", scoreNum != null ? String(scoreNum) : "0");
-      barOuter.setAttribute("aria-valuemin", "0");
-      barOuter.setAttribute("aria-valuemax", "100");
-      barOuter.setAttribute("aria-label", `${meta.label} score`);
-      const barFill = document.createElement("div");
-      barFill.className = "progress-fill";
-      barFill.style.background = color;
-      barFill.style.width = scoreNum != null ? `${scoreNum}%` : "0%";
-      barOuter.appendChild(barFill);
-
-      // Numeric sub-score
-      const scoreEl = document.createElement("div");
-      scoreEl.className = "factor-score";
-      scoreEl.style.color = color;
-      scoreEl.textContent = scoreNum != null ? String(scoreNum) : "--";
-
-      row.append(iconCircle, label, value, barOuter, scoreEl);
-      list.appendChild(row);
+      content.push(list.children.length ? list : el("p", { className: "empty", text: "No factors scored yet." }));
     }
-
-    card.appendChild(list);
-    root.append(style, card);
+    this.shadowRoot.replaceChildren(el("style", { text: STYLES }), el("ha-card", {}, content));
   }
 }
 
-customElements.define("paddle-factors-card", PaddleFactorsCard);
+const STYLES = `
+  :host { display: block; }
+  *, *::before, *::after { box-sizing: border-box; }
+  .title { margin: 0; padding: 16px 16px 4px; font-size: 16px; font-weight: 500; }
+  .factors { margin: 0; padding: 4px 8px 12px; list-style: none; }
+  .factor { display: grid; grid-template-columns: 24px 1fr auto; grid-template-areas: "icon label value" "icon bar sub";
+    align-items: center; gap: 2px 10px; width: 100%; min-height: 44px; padding: 8px; border: 0; border-radius: 8px;
+    background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+  .factor:hover { background: var(--secondary-background-color, rgba(127,127,127,.12)); }
+  .factor:focus-visible { outline: 2px solid var(--primary-color, #03a9f4); outline-offset: 1px; }
+  ha-icon { grid-area: icon; --mdc-icon-size: 22px; }
+  .label { grid-area: label; font-size: 14px; }
+  .value { grid-area: value; font-size: 14px; color: var(--secondary-text-color); }
+  .bar { grid-area: bar; height: 6px; border-radius: 3px; overflow: hidden; background: var(--divider-color, rgba(127,127,127,.3)); }
+  .bar > span { display: block; height: 100%; }
+  .sub { grid-area: sub; font-size: 13px; font-weight: 700; text-align: right; }
+  .empty { margin: 0; padding: 8px 16px 16px; color: var(--secondary-text-color); }
+`;
 
+if (!customElements.get("paddle-factors-card")) customElements.define("paddle-factors-card", PaddleFactorsCard);
 export { PaddleFactorsCard };
