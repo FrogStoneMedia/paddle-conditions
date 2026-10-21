@@ -1,6 +1,7 @@
 """API clients for Paddle Conditions."""
 
 from .base import APIError, BaseAPIClient
+from .cdec import CDECClient, CDECData, CDECReading
 from .noaa import NOAAClient, NOAAData, TidePrediction
 from .open_meteo import (
     AQIData,
@@ -8,16 +9,23 @@ from .open_meteo import (
     OpenMeteoWeatherClient,
     WeatherData,
 )
+from .paddle_conditions import CuratedSpot, PaddleConditionsClient, SpotStations
 from .usgs import USGSClient, USGSData
 
 __all__ = [
     "APIError",
     "AQIData",
     "BaseAPIClient",
+    "CDECClient",
+    "CDECData",
+    "CDECReading",
+    "CuratedSpot",
     "NOAAClient",
     "NOAAData",
     "OpenMeteoAQIClient",
     "OpenMeteoWeatherClient",
+    "PaddleConditionsClient",
+    "SpotStations",
     "TidePrediction",
     "USGSClient",
     "USGSData",
