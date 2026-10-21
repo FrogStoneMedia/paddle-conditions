@@ -12,7 +12,15 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.const import DEGREE, EntityCategory, UnitOfLength, UnitOfRatio, UnitOfSpeed, UnitOfTemperature
+from homeassistant.const import (
+    DEGREE,
+    EntityCategory,
+    UnitOfConductivity,
+    UnitOfLength,
+    UnitOfRatio,
+    UnitOfSpeed,
+    UnitOfTemperature,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -147,6 +155,66 @@ SENSOR_DESCRIPTIONS: tuple[PaddleSensorEntityDescription, ...] = (
         value_fn=lambda data: data.streamflow_cfs,
         enabled_fn=lambda coordinator: bool(coordinator.usgs_station_id),
     ),
+    # California CDEC gauges: on for locations that have them.
+    PaddleSensorEntityDescription(
+        key="river_stage",
+        translation_key="river_stage",
+        device_class=SensorDeviceClass.DISTANCE,
+        native_unit_of_measurement=UnitOfLength.FEET,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
+        value_fn=lambda data: data.river_stage_ft,
+        enabled_fn=lambda coordinator: bool(coordinator.cdec_station_ids),
+    ),
+    PaddleSensorEntityDescription(
+        key="reservoir_level",
+        translation_key="reservoir_level",
+        native_unit_of_measurement=UnitOfRatio.PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.reservoir_percent_full,
+        extra_attrs_fn=lambda data: {"storage_acre_feet": data.reservoir_storage_af},
+        enabled_fn=lambda coordinator: bool(coordinator.cdec_station_ids and coordinator.reservoir_capacity_af),
+    ),
+    PaddleSensorEntityDescription(
+        key="dam_outflow",
+        translation_key="dam_outflow",
+        native_unit_of_measurement="CFS",
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.dam_outflow_cfs,
+        enabled_fn=lambda coordinator: bool(coordinator.cdec_station_ids and coordinator.dam_outflow_threshold_cfs),
+    ),
+    # Few stations report water quality; off until the user wants them.
+    PaddleSensorEntityDescription(
+        key="turbidity",
+        translation_key="turbidity",
+        native_unit_of_measurement="NTU",
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_registry_enabled_default=False,
+        value_fn=lambda data: data.turbidity_ntu,
+    ),
+    PaddleSensorEntityDescription(
+        key="dissolved_oxygen",
+        translation_key="dissolved_oxygen",
+        native_unit_of_measurement="mg/L",
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_registry_enabled_default=False,
+        value_fn=lambda data: data.dissolved_oxygen_mg_l,
+    ),
+    PaddleSensorEntityDescription(
+        key="ph",
+        device_class=SensorDeviceClass.PH,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_registry_enabled_default=False,
+        value_fn=lambda data: data.ph,
+    ),
+    PaddleSensorEntityDescription(
+        key="conductivity",
+        device_class=SensorDeviceClass.CONDUCTIVITY,
+        native_unit_of_measurement=UnitOfConductivity.MICROSIEMENS_PER_CM,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_registry_enabled_default=False,
+        value_fn=lambda data: data.conductivity_us,
+    ),
     PaddleSensorEntityDescription(
         key="condition",
         translation_key="condition",
@@ -207,7 +275,7 @@ class PaddleSensor(CoordinatorEntity[PaddleCoordinator], SensorEntity):
     """A Paddle Conditions sensor entity."""
 
     _attr_has_entity_name = True
-    _attr_attribution = "Data provided by Open-Meteo, USGS, and NOAA"
+    _attr_attribution = "Data provided by Open-Meteo, USGS, NOAA, CDEC and Paddle Conditions"
     # Forecast series are large and change every update; keep them out of the recorder.
     _unrecorded_attributes = frozenset(
         {

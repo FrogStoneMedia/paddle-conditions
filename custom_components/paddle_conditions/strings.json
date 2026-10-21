@@ -199,6 +199,26 @@
       "streamflow": {
         "name": "Streamflow"
       },
+      "river_stage": {
+        "name": "River stage"
+      },
+      "reservoir_level": {
+        "name": "Reservoir level",
+        "state_attributes": {
+          "storage_acre_feet": {
+            "name": "Storage (acre-feet)"
+          }
+        }
+      },
+      "dam_outflow": {
+        "name": "Dam outflow"
+      },
+      "turbidity": {
+        "name": "Turbidity"
+      },
+      "dissolved_oxygen": {
+        "name": "Dissolved oxygen"
+      },
       "forecast_3hr": {
         "name": "3-Hour Forecast"
       }
