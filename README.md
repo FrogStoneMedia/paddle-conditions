@@ -39,7 +39,9 @@ I built this because I was tired of checking four different apps before every pa
 ### Paddle score
 - **Go / Caution / No-go rating** for any paddle location
 - **7 weighted factors**: wind speed, wind gusts, AQI, temperature, UV index, visibility, precipitation
-- **Hard vetoes** block automatically for thunderstorms or extreme wind
+- **Water factors where the data exists**: streamflow for rivers, plus reservoir level, river stage and water quality from California's CDEC gauges
+- **Hard vetoes** block automatically for thunderstorms, extreme wind, a high dam release, or a river running dangerously high
+- **Same score as the Paddle Conditions app**: same curves, weights, vetoes and rounding
 - **24-hour forecast** in eight 3-hour blocks with a "best window" pick
 
 ### Profiles
@@ -52,6 +54,14 @@ I built this because I was tired of checking four different apps before every pa
 - Add as many paddle locations as you want (each is a subentry)
 - Each location gets its own sensors and update cycle
 - Supports lakes, rivers, and bays/oceans with the right data sources for each
+- **Search the Paddle Conditions spots** when you add one and the coordinates and gauges fill themselves in
+
+### California reservoirs and rivers
+Add CDEC station IDs to a California location and the score picks up the same factors the app uses:
+- **Reservoir level**: 100 at 60% full or more, 0 at 20% or less (needs the reservoir's capacity)
+- **River stage**: compared with that gauge's history for the month (curated spots, since the history comes from Paddle Conditions). Racing SUP and river kayaking score higher water better; everyone else scores lower water better.
+- **Water quality**: turbidity, dissolved oxygen, pH and conductivity, from whichever the station reports
+- **No-go** when dam outflow passes your dam-release limit, or the river is above its 95th percentile for the month
 
 ### Bundled dashboard cards
 Six Lovelace cards ship with the integration in one bundle. No extra HACS card downloads needed. They show up in the card picker (and are suggested when you pick a Paddle Score sensor), have visual editors, size themselves in the sections view, and follow your units, language, time zone and light or dark theme.
@@ -111,7 +121,7 @@ Copy `custom_components/paddle_conditions/` to your Home Assistant `custom_compo
 
 ### Adding a location
 
-The integration ships with preset locations (Lake Natoma, Lake Clementine, Sand Harbor at Lake Tahoe, and New Bullards Bar Reservoir) that come pre-filled with coordinates and USGS station IDs. Pick a preset to start, or choose "Custom location" to enter everything yourself.
+Start typing to search the curated Paddle Conditions spots. Picking one fills in its coordinates, water body type, USGS and NOAA stations, and for California spots the CDEC stations, reservoir capacity and dam-release limit. Every field stays editable. Or choose "Custom location" to enter everything yourself. If Paddle Conditions can't be reached, the built-in presets (Lake Natoma, Lake Clementine, Sand Harbor at Lake Tahoe, and New Bullards Bar Reservoir) are offered instead.
 
 For each location you need:
 
@@ -124,6 +134,11 @@ For each location you need:
 | USGS station ID | No | For water temperature and river streamflow. Find yours at [waterdata.usgs.gov](https://waterdata.usgs.gov) |
 | NOAA station ID | No | For water temperature and tides. Find yours at [tidesandcurrents.noaa.gov](https://tidesandcurrents.noaa.gov) |
 | Optimal streamflow | No | Preferred river flow in CFS (river locations only) |
+| CDEC station IDs | No | California only. Comma-separated, nearest first, e.g. `FOL, AFO`. Find them at [cdec.water.ca.gov](https://cdec.water.ca.gov) |
+| Reservoir capacity | No | Full capacity in acre-feet, for scoring reservoir level |
+| Dam release limit | No | Dam outflow (CFS) above which the spot is a No-go |
+
+Optional number fields can be cleared when you edit a location; an empty field turns that factor off.
 
 ### Editing a location
 
@@ -143,14 +158,14 @@ Access via the integration card > **Configure**:
 | Activity | Paddle Boarding | SUP or kayaking, each with its own profiles |
 | Profile | Recreational | Preset weight config for your paddling style |
 | Update interval | 10 min | How often to refresh data (5 to 60 minutes) |
-| Factor weights | Profile defaults | Adjust individual scoring weights (auto-normalized to 100%). Streamflow and tide weights come from the profile. |
+| Factor weights | Profile defaults | Adjust individual scoring weights (auto-normalized to 100%). Streamflow, tide, reservoir level, river stage and water quality weights come from the profile. |
 | USGS API key | None | Optional, free from [api.waterdata.usgs.gov](https://api.waterdata.usgs.gov/signup/). Lets river data refresh every 15 to 20 minutes instead of hourly. |
 
 ---
 
 ## Entities
 
-Each location creates 14 sensors:
+Each location creates 21 sensors. The four water quality sensors start disabled; the CDEC sensors are enabled for locations with CDEC stations.
 
 | Entity | Unit | Description |
 |--------|------|-------------|
@@ -160,12 +175,19 @@ Each location creates 14 sensors:
 | `wind_gusts` | mph | Peak wind gusts |
 | `wind_direction` | ° | Wind bearing in degrees (statistics average angles correctly) |
 | `air_temp` | °F | Air temperature |
-| `water_temp` | °F | Water temperature (requires USGS or NOAA station) |
+| `water_temp` | °F | Water temperature (CDEC, then USGS, then NOAA) |
 | `uv_index` | | UV radiation index |
 | `aqi` | AQI | US Air Quality Index |
 | `visibility` | mi | Atmospheric visibility |
 | `precipitation` | % | Precipitation probability |
-| `streamflow` | CFS | River flow rate (requires USGS station; enabled by default for new locations that have one) |
+| `streamflow` | CFS | River flow rate (CDEC or USGS station; enabled for locations that have one) |
+| `river_stage` | ft | River height at the CDEC gauge |
+| `reservoir_level` | % | How full the reservoir is, with `storage_acre_feet` as an attribute (needs capacity) |
+| `dam_outflow` | CFS | Water released from the dam (needs a dam-release limit) |
+| `turbidity` | NTU | Water clarity (disabled by default) |
+| `dissolved_oxygen` | mg/L | Dissolved oxygen (disabled by default) |
+| `ph` | | pH (disabled by default) |
+| `conductivity` | µS/cm | Conductivity (disabled by default) |
 | `condition` | | Weather conditions, translated (state values are keys like `partly_cloudy` or `thunderstorm`) |
 | `forecast_3hr` | | 3-hour forecast blocks with per-block scores and hourly data |
 
@@ -206,12 +228,18 @@ Seven factors are scored individually using piecewise linear curves matched to y
 | Visibility | 10% | Fog, haze, low-visibility hazards |
 | Precipitation | 5% | Rain probability |
 
+Where the location has the data, water factors join in: streamflow for rivers (USGS or CDEC), reservoir level for lakes and river stage for rivers (CDEC), and water quality (CDEC). Factors without data drop out and the weights renormalize.
+
 Weights are customizable. Profiles provide good defaults: Racing tolerates more wind, Family is stricter across the board.
 
 **Hard vetoes** override the score entirely:
 - Thunderstorms (always enforced)
 - Extreme wind (profile-dependent threshold)
 - Dangerous AQI levels
+- Dam outflow above your dam-release limit
+- River stage at or above the gauge's 95th percentile for the month
+
+Scores round half up, the same as the Paddle Conditions app, so a 92.5 is a 93 in both.
 
 ---
 
@@ -231,7 +259,7 @@ The integration bundles six custom Lovelace cards and an action that generates a
 
 **`paddle-spots-card`**: Every spot's score and rating. Tap one for its details. With no `entities` set, it shows all your locations.
 
-**`paddle-factors-card`**: Each scoring factor with its reading and sub-score. Tap a row for that sensor's history.
+**`paddle-factors-card`**: Each scoring factor with its reading and sub-score, including river stage, reservoir level and water quality when they're scored. Tap a row for that sensor's history.
 
 **`paddle-forecast-card`**: The next 24 hours in 3-hour blocks, with the best window highlighted.
 
@@ -261,12 +289,17 @@ All APIs are free and public. None needs an account; USGS takes an optional free
 |--------|------|----------|
 | [Open-Meteo Weather](https://open-meteo.com/) | Wind, gusts, temperature, UV, visibility, precipitation, weather codes, 48-hour hourly forecast | Yes |
 | [Open-Meteo Air Quality](https://open-meteo.com/) | US AQI, PM2.5, PM10, ozone | Yes |
+| [National Weather Service](https://www.weather.gov/documentation/services-web-api) | Wind, gusts, wind direction, temperature, rain chance (current and hourly), refreshed hourly | No, automatic for US locations |
 | [USGS Water Data API](https://api.waterdata.usgs.gov/) | Water temperature, streamflow (CFS), refreshed hourly (every 15 to 20 minutes with a key) | No, river locations |
 | [NOAA CO-OPS](https://tidesandcurrents.noaa.gov/) | Water temperature | No, bay/ocean locations |
+| [CDEC](https://cdec.water.ca.gov/) | Reservoir storage and dam outflow, river stage, flow, water temperature, water quality, refreshed every 30 minutes | No, California locations |
+| [Paddle Conditions](https://paddleconditions.com/) | The curated spot list, each spot's gauges, reservoir capacity, dam-release limit and monthly river-stage history | No, curated spots |
 
 Weather is required for scoring. Without it the integration won't produce a score. Air quality is scored when available.
 
-USGS and NOAA are optional. If a station is unavailable, those factors drop out and weights renormalize automatically. All API calls run in parallel, both across data sources and across locations. Server errors are retried once with backoff. If the weather API is unreachable on startup, the integration loads a recent cached reading; with no recent cache it retries setup until the API answers.
+For US locations, wind, gusts, wind direction, temperature and rain chance come from the National Weather Service, which handles large lakes better than Open-Meteo's model grid; Open-Meteo still supplies UV, visibility and conditions, and covers everything when NWS is down or its forecast is more than three hours old. CDEC water temperature and flow take precedence over USGS, as in the app.
+
+USGS, NOAA and CDEC are optional. If a station is unavailable, those factors drop out and weights renormalize automatically. Readings older than six hours are dropped. With several CDEC stations, each value comes from the nearest station that reported it recently. All API calls run in parallel, both across data sources and across locations. Server errors are retried once with backoff. If the weather API is unreachable on startup, the integration loads a recent cached reading; with no recent cache it retries setup until the API answers.
 
 The tide factor exists in the scoring profiles but has no data source yet, so bay and ocean locations score without it.
 
@@ -303,7 +336,8 @@ automation:
 
 - **Tides aren't scored yet.** Bay and ocean locations score without a tide factor.
 - **USGS without a key refreshes hourly.** Keyless requests share a small per-network quota. Add a free key under **Configure** for updates every 15 to 20 minutes.
-- **US-centric water data.** USGS and NOAA stations only cover the United States. Weather and air quality work anywhere Open-Meteo does.
+- **US-centric water data.** USGS and NOAA stations only cover the United States, CDEC only California, and NWS the contiguous US. Weather and air quality work anywhere Open-Meteo does.
+- **River stage needs a curated spot.** Its monthly history comes from Paddle Conditions, so a custom location with CDEC stations still gets reservoir level, water quality and the dam-release No-go, but not river stage.
 
 ---
 
@@ -327,6 +361,9 @@ automation:
 - These need a USGS or NOAA station ID in your location config
 - Verify your station ID at [waterdata.usgs.gov](https://waterdata.usgs.gov) or [tidesandcurrents.noaa.gov](https://tidesandcurrents.noaa.gov)
 - Not all stations report all parameters. Check that yours provides the data you expect.
+
+### "Could not load this spot from Paddle Conditions"
+- The spot list loaded but that spot's details didn't. Try again, or choose "Custom location" and enter it yourself.
 
 ### "USGS is rate limiting river data" repair
 - The USGS Water Data API limits keyless requests per network. Get a free key at [api.waterdata.usgs.gov/signup](https://api.waterdata.usgs.gov/signup/) and add it under **Configure > USGS API key**. The repair clears itself once USGS answers again.

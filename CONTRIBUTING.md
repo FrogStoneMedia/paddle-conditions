@@ -73,27 +73,33 @@ custom_components/
     ├── presets.py               # Preset location definitions
     ├── dashboard_generator.py   # Service action: generates dashboard YAML
     ├── strings.json             # UI strings and translations
-    ├── www/                     # Bundled Lovelace card JS files
-    │   ├── paddle-score-card.js
-    │   └── paddle-spots-card.js
+    ├── frontend/dist/           # Built card bundle (paddle-cards.js), from frontend/src
     ├── brand/                   # Integration icon/logo assets
     └── api/
         ├── base.py              # Base API client (retry, timeout)
         ├── open_meteo.py        # Weather + AQI clients
         ├── usgs.py              # USGS water data client
-        └── noaa.py              # NOAA tide/temperature client
+        ├── noaa.py              # NOAA tide/temperature client
+        ├── nws.py               # National Weather Service forecast overlay (US)
+        ├── cdec.py              # California CDEC reservoir, river and water quality client
+        └── paddle_conditions.py # Paddle Conditions public API (curated spots)
 tests/
 ├── conftest.py                  # Shared fixtures
 ├── fixtures/                    # Recorded API responses
 ├── test_scoring.py
 ├── test_profiles.py
-├── test_coordinator.py
+├── test_coordinator_ha.py
 ├── test_config_flow.py
 ├── test_sensor.py
 ├── test_frontend.py
+├── test_coordinator_cdec.py     # CDEC readings, baselines and vetoes
+├── test_coordinator_nws.py      # NWS overlay
 ├── test_api_open_meteo.py
 ├── test_api_usgs.py
 ├── test_api_noaa.py
+├── test_api_nws.py
+├── test_api_cdec.py
+├── test_api_paddle_conditions.py
 └── test_diagnostics.py
 ```
 
