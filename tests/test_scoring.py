@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from custom_components.paddle_conditions.models import (
     FactorResult,
     ForecastBlock,
@@ -835,3 +837,145 @@ def test_zero_weight_factor_is_never_limiting_or_missing():
 
     assert score.limiting_factor in {"wind_speed", "air_quality"}
     assert score.missing_factors == []
+
+
+# --- Parity with the Paddle Conditions API (api/src/lib/scoring.ts) ---------
+
+from custom_components.paddle_conditions.scoring import (  # noqa: E402
+    StageBaseline,
+    score_reservoir_level,
+    score_river_stage,
+    score_water_quality,
+)
+
+BASELINE = StageBaseline(p10=2.0, p25=3.0, p50=4.0, p75=6.0, p90=8.0, p95=10.0, sample_count=90)
+
+
+@pytest.mark.parametrize(
+    ("storage", "capacity", "expected"),
+    [
+        (700, 1000, 100),
+        (600, 1000, 100),
+        (200, 1000, 0),
+        (100, 1000, 0),
+        (400, 1000, 50),
+        (None, 1000, None),
+        (500, None, None),
+        (500, 0, None),
+    ],
+)
+def test_reservoir_level_matches_api(storage, capacity, expected):
+    assert score_reservoir_level(storage, capacity) == expected
+
+
+@pytest.mark.parametrize(
+    ("stage", "inverted", "expected"),
+    [
+        (4.0, False, 100),
+        (6.0, False, 50),
+        (8.0, False, 0),
+        (5.0, False, 75),
+        (4.0, True, 100),
+        (3.0, True, 50),
+        (2.0, True, 0),
+        (None, False, None),
+    ],
+)
+def test_river_stage_matches_api(stage, inverted, expected):
+    assert score_river_stage(stage, BASELINE, inverted) == expected
+
+
+def test_river_stage_needs_enough_baseline_samples():
+    thin = StageBaseline(p10=2.0, p25=3.0, p50=4.0, p75=6.0, p90=8.0, p95=10.0, sample_count=59)
+    assert score_river_stage(5.0, thin, False) is None
+    assert score_river_stage(5.0, None, False) is None
+
+
+@pytest.mark.parametrize(
+    ("wq", "expected"),
+    [
+        ({}, None),
+        ({"turbidity_ntu": 5}, 100),
+        ({"turbidity_ntu": 50}, 50),
+        ({"dissolved_oxygen_mg_l": 4}, 50),
+        ({"ph": 7.0}, 100),
+        ({"ph": 6.0}, 50),
+        ({"ph": 9.0}, 50),
+        ({"conductivity_us": 2000}, 50),
+        ({"turbidity_ntu": 5, "ph": 6.0}, 75),
+    ],
+)
+def test_water_quality_matches_api(wq, expected):
+    assert score_water_quality(wq) == expected
+
+
+def _ideal(**overrides):
+    from custom_components.paddle_conditions.scoring import compute_paddle_score
+
+    args = dict(
+        wind_speed=2.0,
+        wind_gusts=4.0,
+        aqi=20,
+        air_temp=75.0,
+        uv_index=2.0,
+        visibility=10.0,
+        precipitation=0,
+        has_thunderstorm=False,
+        weights={
+            "wind_speed": 0.3,
+            "wind_gusts": 0.1,
+            "air_quality": 0.2,
+            "temperature": 0.15,
+            "uv_index": 0.1,
+            "visibility": 0.1,
+            "precipitation": 0.05,
+            "streamflow": 0.15,
+            "tide": 0.1,
+            "reservoir_level": 0.1,
+            "water_quality": 0.1,
+            "river_stage": 0.1,
+        },
+    )
+    args.update(overrides)
+    return compute_paddle_score(**args)
+
+
+def test_dam_release_above_threshold_is_a_veto():
+    score = _ideal(dam_outflow_cfs=5200, dam_outflow_threshold_cfs=5000)
+    assert score.vetoed and score.rating == "NO_GO"
+    assert score.veto_reason == "High dam release: 5200 CFS exceeds 5000 CFS threshold"
+
+
+def test_river_stage_at_p95_is_a_veto_for_every_water_body():
+    score = _ideal(river_stage_ft=10.0, stage_baseline=BASELINE, water_body_type="lake")
+    assert score.vetoed and score.veto_reason == "Dangerous water level"
+
+
+def test_reservoir_level_scores_on_lakes_and_counts_as_missing_without_storage():
+    low = _ideal(water_body_type="lake", reservoir_storage_af=200, reservoir_capacity_af=1000)
+    assert low.factors["reservoir_level"] == 0
+    missing = _ideal(water_body_type="lake", reservoir_storage_af=None, reservoir_capacity_af=1000)
+    assert "reservoir_level" in missing.missing_factors
+    not_configured = _ideal(water_body_type="lake")
+    assert "reservoir_level" not in not_configured.missing_factors
+
+
+def test_river_stage_scores_only_on_rivers():
+    river = _ideal(water_body_type="river", streamflow_cfs=500, river_stage_ft=8.0, stage_baseline=BASELINE)
+    assert river.factors["river_stage"] == 0
+    lake = _ideal(water_body_type="lake", river_stage_ft=8.0, stage_baseline=BASELINE)
+    assert "river_stage" not in lake.factors
+
+
+def test_water_quality_scores_when_present():
+    score = _ideal(water_quality={"turbidity_ntu": 50})
+    assert score.factors["water_quality"] == 50
+
+
+def test_rounding_matches_javascript_half_up():
+    """Python's round() is banker's rounding; the API (Math.round) rounds .5 up."""
+    from custom_components.paddle_conditions.scoring import _linear_score
+
+    # 100 - 50 * (11.25 - 10) / (20 - 10) = 93.75 -> 94 either way; pick an exact .5:
+    assert _linear_score(12.5, 10, 20, 30) == 88  # 87.5 -> 88 (round() would give 88 too)
+    assert _linear_score(11.5, 10, 20, 30) == 93  # 92.5 -> 93, round() gives 92
