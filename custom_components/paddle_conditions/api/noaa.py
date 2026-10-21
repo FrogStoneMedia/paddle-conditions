@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from aiohttp import ClientSession
@@ -10,6 +11,7 @@ from aiohttp import ClientSession
 from .base import BaseAPIClient
 
 COOPS_URL = "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter"
+MAX_OBSERVATION_AGE = timedelta(hours=6)
 
 
 @dataclass(frozen=True)
@@ -62,7 +64,7 @@ class NOAAClient(BaseAPIClient):
                         type=entry.get("type", ""),
                     )
                 )
-            except (KeyError, ValueError):
+            except KeyError, ValueError:
                 continue
 
         return NOAAData(tide_predictions=predictions, water_temp_f=None)
@@ -83,6 +85,12 @@ class NOAAClient(BaseAPIClient):
         if not entries:
             return None
         try:
-            return float(entries[-1]["v"])
-        except (KeyError, ValueError, TypeError):
+            # time_zone=gmt, so "YYYY-MM-DD HH:MM" is UTC.
+            observed = datetime.strptime(entries[-1]["t"], "%Y-%m-%d %H:%M").replace(tzinfo=UTC)
+            value = float(entries[-1]["v"])
+        except KeyError, ValueError, TypeError:
             return None
+        # "latest" is the last reading however old; a dead sensor isn't current.
+        if datetime.now(UTC) - observed > MAX_OBSERVATION_AGE:
+            return None
+        return value

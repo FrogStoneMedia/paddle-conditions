@@ -140,3 +140,66 @@ async def test_fetch_aqi_missing_fields(mock_session):
     data = await client.fetch(latitude=38.637, longitude=-121.227)
     assert data.aqi == 50
     assert data.pm25 is None
+
+
+# --- Forecast window and time handling ---
+
+
+async def test_fetch_weather_requests_forward_utc_window(mock_session, weather_response):
+    """Hourly data must start at the current hour and come back in UTC."""
+    mock_session.get = mock_get_json(weather_response)
+
+    await OpenMeteoWeatherClient(mock_session).fetch(latitude=38.637, longitude=-121.227)
+
+    params = mock_session.get.call_args.kwargs["params"]
+    # forecast_hours sets the hourly window (starting now); forecast_days only sizes the daily sunrise/sunset.
+    assert params["forecast_hours"] == 48
+    assert params["daily"] == "sunrise,sunset"
+    assert params["timezone"] == "GMT"
+    hourly = params["hourly"].split(",")
+    assert "wind_gusts_10m" in hourly
+    assert "precipitation_probability" in hourly
+
+
+async def test_fetch_weather_hourly_times_are_utc_aware(mock_session):
+    """Offset-free GMT timestamps are returned as explicit UTC ISO strings."""
+    response = {
+        "current": {"wind_speed_10m": 3.0, "weather_code": 0},
+        "hourly": {
+            "time": ["2026-10-21T19:00", "2026-10-21T20:00"],
+            "wind_speed_10m": [3.0, 4.0],
+            "wind_gusts_10m": [6.0, 7.0],
+            "temperature_2m": [70.0, 71.0],
+            "uv_index": [2.0, 1.0],
+            "precipitation_probability": [5, 10],
+            "weather_code": [0, 1],
+        },
+    }
+    mock_session.get = mock_get_json(response)
+
+    data = await OpenMeteoWeatherClient(mock_session).fetch(latitude=38.6, longitude=-121.2)
+
+    assert data.hourly_times == ["2026-10-21T19:00:00+00:00", "2026-10-21T20:00:00+00:00"]
+    assert data.hourly_gusts == [6.0, 7.0]
+
+
+async def test_fetch_weather_keeps_missing_hourly_values_as_none(mock_session):
+    """Open-Meteo sends null for hours it has no value for; keep it None, don't invent zeros."""
+    response = {
+        "current": {"wind_speed_10m": 3.0, "weather_code": 0},
+        "hourly": {
+            "time": ["2026-10-21T19:00"],
+            "wind_speed_10m": [None],
+            "temperature_2m": [None],
+            "uv_index": [None],
+            "precipitation_probability": [None],
+            "weather_code": [None],
+        },
+    }
+    mock_session.get = mock_get_json(response)
+
+    data = await OpenMeteoWeatherClient(mock_session).fetch(latitude=38.6, longitude=-121.2)
+
+    assert data.hourly_wind == [None]
+    assert data.hourly_gusts == [None]
+    assert data.hourly_precip == [None]

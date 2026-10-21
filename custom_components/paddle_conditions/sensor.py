@@ -12,26 +12,37 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfLength, UnitOfSpeed, UnitOfTemperature
+from homeassistant.const import DEGREE, EntityCategory, UnitOfLength, UnitOfRatio, UnitOfSpeed, UnitOfTemperature
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.typing import StateType
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .api.open_meteo import WEATHER_CODE_CONDITIONS
+from .const import DOMAIN, WATER_BODY_BAY_OCEAN, WATER_BODY_LAKE, WATER_BODY_RIVER
 from .coordinator import PaddleConfigEntry, PaddleCoordinator
 from .models import PaddleConditions
 
 PARALLEL_UPDATES = 0
 
+RATINGS = ["go", "caution", "no_go"]
+
+WATER_BODY_MODELS = {
+    WATER_BODY_LAKE: "Lake or reservoir",
+    WATER_BODY_RIVER: "River",
+    WATER_BODY_BAY_OCEAN: "Bay or ocean",
+}
+
 
 @dataclass(frozen=True, kw_only=True)
-class PaddleSensorEntityDescription(SensorEntityDescription):  # type: ignore[misc]
+class PaddleSensorEntityDescription(SensorEntityDescription):
     """Paddle Conditions sensor entity description."""
 
     value_fn: Callable[[PaddleConditions], StateType]
     extra_attrs_fn: Callable[[PaddleConditions], dict[str, Any]] | None = None
+    # Overrides entity_registry_enabled_default per location when set.
+    enabled_fn: Callable[[PaddleCoordinator], bool] | None = None
 
 
 SENSOR_DESCRIPTIONS: tuple[PaddleSensorEntityDescription, ...] = (
@@ -39,7 +50,7 @@ SENSOR_DESCRIPTIONS: tuple[PaddleSensorEntityDescription, ...] = (
         key="score",
         translation_key="paddle_score",
         state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement=PERCENTAGE,
+        native_unit_of_measurement=UnitOfRatio.PERCENTAGE,
         value_fn=lambda data: data.score.value,
         extra_attrs_fn=lambda data: {
             "rating": data.score.rating,
@@ -51,6 +62,13 @@ SENSOR_DESCRIPTIONS: tuple[PaddleSensorEntityDescription, ...] = (
             "vetoed": data.score.vetoed,
             "veto_reason": data.score.veto_reason,
         },
+    ),
+    PaddleSensorEntityDescription(
+        key="rating",
+        translation_key="rating",
+        device_class=SensorDeviceClass.ENUM,
+        options=RATINGS,
+        value_fn=lambda data: data.score.rating.lower(),
     ),
     PaddleSensorEntityDescription(
         key="wind_speed",
@@ -71,8 +89,9 @@ SENSOR_DESCRIPTIONS: tuple[PaddleSensorEntityDescription, ...] = (
     PaddleSensorEntityDescription(
         key="wind_direction",
         translation_key="wind_direction",
-        native_unit_of_measurement="°",
-        state_class=SensorStateClass.MEASUREMENT,
+        device_class=SensorDeviceClass.WIND_DIRECTION,
+        native_unit_of_measurement=DEGREE,
+        state_class=SensorStateClass.MEASUREMENT_ANGLE,
         value_fn=lambda data: data.wind_direction,
     ),
     PaddleSensorEntityDescription(
@@ -115,30 +134,30 @@ SENSOR_DESCRIPTIONS: tuple[PaddleSensorEntityDescription, ...] = (
     PaddleSensorEntityDescription(
         key="precipitation",
         translation_key="precipitation",
-        native_unit_of_measurement=PERCENTAGE,
+        native_unit_of_measurement=UnitOfRatio.PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.precipitation_probability,
     ),
     PaddleSensorEntityDescription(
         key="streamflow",
         translation_key="streamflow",
+        # HA has no ft³/s unit and CFS is what paddlers read, so no device class.
         native_unit_of_measurement="CFS",
         state_class=SensorStateClass.MEASUREMENT,
-        entity_category=EntityCategory.DIAGNOSTIC,
-        entity_registry_enabled_default=False,
         value_fn=lambda data: data.streamflow_cfs,
+        enabled_fn=lambda coordinator: bool(coordinator.usgs_station_id),
     ),
     PaddleSensorEntityDescription(
         key="condition",
         translation_key="condition",
+        device_class=SensorDeviceClass.ENUM,
+        options=list(WEATHER_CODE_CONDITIONS.values()),
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda data: data.condition_text,
+        value_fn=lambda data: data.condition,
     ),
     PaddleSensorEntityDescription(
         key="forecast_3hr",
         translation_key="forecast_3hr",
-        entity_category=EntityCategory.DIAGNOSTIC,
-        entity_registry_enabled_default=False,
         value_fn=lambda data: data.forecast_blocks[0].score if data.forecast_blocks else None,
         extra_attrs_fn=lambda data: {
             "blocks": [
@@ -148,9 +167,12 @@ SENSOR_DESCRIPTIONS: tuple[PaddleSensorEntityDescription, ...] = (
                     "score": b.score,
                     "rating": b.rating,
                     "wind_mph": b.wind_mph,
+                    "gust_mph": b.gust_mph,
                     "temp_f": b.temp_f,
                     "uv": b.uv,
                     "precip_pct": b.precip_pct,
+                    "aqi": b.aqi,
+                    "visibility_mi": b.visibility_mi,
                 }
                 for b in data.forecast_blocks
             ],
@@ -158,9 +180,11 @@ SENSOR_DESCRIPTIONS: tuple[PaddleSensorEntityDescription, ...] = (
             "best_score": max(b.score for b in data.forecast_blocks) if data.forecast_blocks else None,
             "hourly_times": data.hourly_times,
             "hourly_wind": data.hourly_wind,
+            "hourly_gusts": data.hourly_gusts,
             "hourly_temp": data.hourly_temp,
             "hourly_uv": data.hourly_uv,
             "hourly_precip": data.hourly_precip,
+            "daylight": data.daylight,
         },
     ),
 )
@@ -179,11 +203,26 @@ async def async_setup_entry(
         )
 
 
-class PaddleSensor(CoordinatorEntity[PaddleCoordinator], SensorEntity):  # type: ignore[misc]
+class PaddleSensor(CoordinatorEntity[PaddleCoordinator], SensorEntity):
     """A Paddle Conditions sensor entity."""
 
     _attr_has_entity_name = True
     _attr_attribution = "Data provided by Open-Meteo, USGS, and NOAA"
+    # Forecast series are large and change every update; keep them out of the recorder.
+    _unrecorded_attributes = frozenset(
+        {
+            "blocks",
+            "best_block",
+            "best_score",
+            "hourly_times",
+            "hourly_wind",
+            "hourly_gusts",
+            "hourly_temp",
+            "hourly_uv",
+            "hourly_precip",
+            "daylight",
+        }
+    )
     entity_description: PaddleSensorEntityDescription
 
     def __init__(
@@ -195,23 +234,27 @@ class PaddleSensor(CoordinatorEntity[PaddleCoordinator], SensorEntity):  # type:
         super().__init__(coordinator)
         self.entity_description = description
         self._attr_unique_id = f"{subentry_id}_{description.key}"
+        if description.enabled_fn is not None:
+            self._attr_entity_registry_enabled_default = description.enabled_fn(coordinator)
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, subentry_id)},
             name=coordinator.location_name,
             manufacturer="Paddle Conditions",
-            model=coordinator.water_body_type,
+            model=WATER_BODY_MODELS.get(coordinator.water_body_type, coordinator.water_body_type),
+            model_id=coordinator.water_body_type,
+            entry_type=DeviceEntryType.SERVICE,
         )
+
+    # Entities are only added after a successful first refresh, so data is set.
 
     @property
     def native_value(self) -> StateType:
         """Return the sensor value."""
-        if self.coordinator.data is None:
-            return None
         return self.entity_description.value_fn(self.coordinator.data)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
         """Return additional state attributes."""
-        if self.coordinator.data is None or self.entity_description.extra_attrs_fn is None:
+        if self.entity_description.extra_attrs_fn is None:
             return None
         return self.entity_description.extra_attrs_fn(self.coordinator.data)

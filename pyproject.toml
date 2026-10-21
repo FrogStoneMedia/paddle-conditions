@@ -1,7 +1,7 @@
 [project]
 name = "paddle-conditions"
-version = "1.0.0"
-requires-python = ">=3.12"
+version = "2.0.0"
+requires-python = ">=3.14"
 
 [tool.setuptools.packages.find]
 include = ["custom_components*"]
@@ -11,16 +11,16 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 
 [tool.ruff]
-target-version = "py312"
+target-version = "py314"
 line-length = 120
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 
 [tool.mypy]
-python_version = "3.12"
+# Checked against the installed Home Assistant, not stubs-less Any.
+python_version = "3.14"
 strict = true
-warn_return_any = true
 warn_unused_configs = true
-ignore_missing_imports = true
-no_site_packages = true
+warn_unreachable = true
+files = ["custom_components/paddle_conditions"]

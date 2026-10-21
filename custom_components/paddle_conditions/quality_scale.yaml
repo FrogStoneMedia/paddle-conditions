@@ -1,46 +1,78 @@
 # Quality Scale for Paddle Conditions
 # https://developers.home-assistant.io/docs/core/integration-quality-scale/
+# Hassfest doesn't validate this file for custom integrations; every "done"
+# below is backed by code and a test in this repo (audited 2026-10-21).
 
 rules:
   # Bronze
-  action-setup: done
+  action-setup:
+    status: done
+    comment: get_dashboard_yaml is registered in async_setup (services.py)
   appropriate-polling: done
   brands:
-    status: exempt
-    comment: Custom/HACS integration, not in HA core
+    status: done
+    comment: Served from the integration's brand/ folder (HA 2026.3+)
   common-modules: done
-  config-flow-test-coverage: done
+  config-flow-test-coverage:
+    status: done
+    comment: 100% line coverage of config_flow.py, enforced with the 95% CI floor
   config-flow: done
-  dependency-transparency: done
+  dependency-transparency:
+    status: done
+    comment: No third-party requirements; HTTP uses HA's shared aiohttp session
   docs-actions: done
+  docs-conditions:
+    status: exempt
+    comment: Provides no conditions
   docs-high-level-description: done
   docs-installation-instructions: done
   docs-removal-instructions: done
-  entity-event-setup: done
+  docs-triggers:
+    status: exempt
+    comment: Provides no triggers
+  entity-event-setup:
+    status: exempt
+    comment: Coordinator entities only; no event subscriptions
   entity-unique-id: done
   has-entity-name: done
   runtime-data: done
-  test-before-configure: done
-  test-before-setup: done
+  test-before-configure:
+    status: done
+    comment: Adding or editing a location checks the weather API for those coordinates
+  test-before-setup:
+    status: done
+    comment: First-refresh failures raise ConfigEntryNotReady unless a fresh cached reading exists
   unique-config-entry: done
 
   # Silver
-  action-exceptions: done
+  action-exceptions:
+    status: done
+    comment: ServiceValidationError with a translation key when there are no locations
   config-entry-unloading: done
   docs-configuration-parameters: done
   docs-installation-parameters: done
-  entity-unavailable: done
+  entity-unavailable:
+    status: done
+    comment: Entities go unavailable once the last weather reading is older than max(1 h, 2 x update interval)
   integration-owner: done
-  log-when-unavailable: done
+  log-when-unavailable:
+    status: done
+    comment: Each source outage is logged once, and once on recovery
   parallel-updates: done
   reauthentication-flow:
     status: exempt
-    comment: No authentication required — uses free public APIs only
-  test-coverage: done
+    comment: >-
+      No credential is required. The optional USGS key only raises a rate
+      limit; it is set in options and a rate-limit repair issue points to it.
+  test-coverage:
+    status: done
+    comment: 99% overall, every module above 95%; CI fails under 95%
 
   # Gold
   devices: done
-  diagnostics: done
+  diagnostics:
+    status: done
+    comment: Coordinates, spot names and the USGS key are redacted
   discovery-update-info:
     status: exempt
     comment: Cloud polling service, no local network discovery
@@ -56,22 +88,32 @@ rules:
   docs-supported-functions: done
   docs-troubleshooting: done
   docs-use-cases: done
-  dynamic-devices: done
+  dynamic-devices:
+    status: done
+    comment: One service device per location subentry, added and removed with it
   entity-category: done
   entity-device-class: done
-  entity-disabled-by-default: done
+  entity-disabled-by-default:
+    status: done
+    comment: Streamflow is enabled only for locations with a USGS station
   entity-translations: done
   exception-translations:
-    status: exempt
-    comment: No user-facing translatable exception messages
+    status: done
+    comment: UpdateFailed and ServiceValidationError use translation keys
   icon-translations: done
-  reconfiguration-flow: done
+  reconfiguration-flow:
+    status: done
+    comment: Locations are reconfigured through the subentry reconfigure step
   repair-issues:
-    status: exempt
-    comment: No scenarios requiring repair flows currently
-  stale-devices: done
+    status: done
+    comment: usgs_rate_limited, raised on HTTP 429 without a key and cleared on recovery
+  stale-devices:
+    status: done
+    comment: Devices belong to their location subentry and are removed with it
 
   # Platinum
   async-dependency: done
   inject-websession: done
-  strict-typing: done
+  strict-typing:
+    status: done
+    comment: mypy --strict against the installed Home Assistant, run in CI

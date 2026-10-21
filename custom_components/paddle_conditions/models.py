@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from collections.abc import Mapping
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 
@@ -37,10 +38,13 @@ class ForecastBlock:
     end: str
     score: int
     rating: str
-    wind_mph: float
-    temp_f: float
-    uv: float
-    precip_pct: int
+    wind_mph: float | None
+    gust_mph: float | None
+    temp_f: float | None
+    uv: float | None
+    precip_pct: int | None
+    aqi: int | None = None
+    visibility_mi: float | None = None
 
 
 @dataclass(frozen=True)
@@ -61,21 +65,28 @@ class PaddleConditions:
     precipitation_probability: int | None
     streamflow_cfs: float | None
     tide_factor: float | None
-    condition_text: str | None
+    condition: str | None  # WMO condition key, e.g. "partly_cloudy"
     forecast_blocks: list[ForecastBlock]
     hourly_times: list[str]
-    hourly_wind: list[float]
-    hourly_temp: list[float]
-    hourly_uv: list[float]
-    hourly_precip: list[int]
+    hourly_wind: list[float | None]
+    hourly_gusts: list[float | None]
+    hourly_temp: list[float | None]
+    hourly_uv: list[float | None]
+    hourly_precip: list[int | None]
+    fetched_at: str  # UTC ISO 8601, when the weather data was fetched
+    daylight: list[dict[str, str]] = field(default_factory=list)  # [{"sunrise", "sunset"}], UTC
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to a JSON-compatible dict."""
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> PaddleConditions:
-        """Deserialize from a dict."""
-        data["score"] = PaddleScore(**data["score"])
-        data["forecast_blocks"] = [ForecastBlock(**b) for b in data["forecast_blocks"]]
-        return cls(**data)
+    def from_dict(cls, data: Mapping[str, Any]) -> PaddleConditions:
+        """Deserialize from a dict without modifying it.
+
+        Raises KeyError, TypeError or ValueError if the shape doesn't match.
+        """
+        fields = dict(data)
+        fields["score"] = PaddleScore(**fields["score"])
+        fields["forecast_blocks"] = [ForecastBlock(**b) for b in fields["forecast_blocks"]]
+        return cls(**fields)

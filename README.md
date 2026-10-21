@@ -1,10 +1,10 @@
 # <img src="custom_components/paddle_conditions/brand/icon.png" alt="Paddle Conditions" width="50" height="50"/> Paddle Conditions
 
 [![License](https://img.shields.io/github/license/FrogStoneMedia/paddle-conditions?style=for-the-badge)](https://opensource.org/licenses/MIT)
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=for-the-badge)](https://github.com/custom-components/hacs)
-[![HA Version](https://img.shields.io/badge/Home%20Assistant-2026.3%2B-41BDF5?style=for-the-badge&logo=home-assistant)](https://www.home-assistant.io/)
+[![hacs_badge](https://img.shields.io/badge/HACS-Default-41BDF5.svg?style=for-the-badge)](https://hacs.xyz)
+[![HA Version](https://img.shields.io/badge/Home%20Assistant-2026.9%2B-41BDF5?style=for-the-badge&logo=home-assistant)](https://www.home-assistant.io/)
 
-Paddle Conditions is a [Home Assistant](https://www.home-assistant.io/) custom integration that fetches weather, water, and air quality data for your paddle spots, scores each one **Go / Caution / No-go**, and shows a 24-hour forecast so you can pick the best window. All data comes from free public APIs. No accounts, no API keys, no subscriptions.
+Paddle Conditions is a [Home Assistant](https://www.home-assistant.io/) custom integration that fetches weather, water, and air quality data for your paddle spots, scores each one **Go / Caution / No-go**, and shows a 24-hour forecast so you can pick the best window. All data comes from free public APIs. No accounts, no subscriptions, and no API keys required.
 
 <p align="center">
   <img src="docs/images/dashboard-mobile.png" alt="Paddle Conditions dashboard showing score badges and location card" width="300"/>
@@ -25,6 +25,9 @@ I built this because I was tired of checking four different apps before every pa
 - [Scoring](#scoring)
 - [Dashboard](#dashboard)
 - [Data sources](#data-sources)
+- [Automation example](#automation-example)
+- [Known limitations](#known-limitations)
+- [Removing the integration](#removing-the-integration)
 - [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
 - [License](#license)
@@ -69,8 +72,8 @@ All bundled cards follow WCAG 2.1 AA guidelines:
 - **Respects `prefers-reduced-motion`** to disable animations for users with vestibular sensitivities
 - **Color contrast** meets AA ratios. Ratings include text labels alongside color so no information is conveyed by color alone.
 
-### Caching
-API data is cached to disk after each successful fetch. On restart, cached data loads immediately so your dashboard renders before APIs respond. If a weather API call fails, the integration falls back to cached data instead of going unavailable.
+### Caching and freshness
+The last good conditions for each location are cached to disk. On restart, a recent cached reading loads immediately so your dashboard renders before APIs respond. If the weather API fails, the last reading stays up for up to an hour (or two update intervals, if that's longer). After that the sensors go unavailable, so you never see an old Go as if it were current. Each outage is logged once, and again when the source comes back.
 
 ---
 
@@ -78,14 +81,13 @@ API data is cached to disk after each successful fetch. On restart, cached data 
 
 ### HACS (recommended)
 
-1. Open HACS in Home Assistant
-2. Click the three dots menu > **Custom repositories**
-3. Add this repository URL as an **Integration**:
-   ```
-   https://github.com/FrogStoneMedia/paddle-conditions
-   ```
-4. Search for "Paddle Conditions" and install it
-5. Restart Home Assistant
+Paddle Conditions is in the HACS default store. On Home Assistant 2026.11 and later, HACS is built in as **Settings > Marketplace**.
+
+1. Open HACS (or Marketplace) in Home Assistant
+2. Search for "Paddle Conditions" and install it
+3. Restart Home Assistant
+
+Requires Home Assistant 2026.9 or later.
 
 <details>
 <summary>Manual installation</summary>
@@ -127,7 +129,7 @@ To change a location's settings (e.g. adding a USGS station ID for water tempera
 1. Go to **Settings > Devices & Services > Paddle Conditions**
 2. Click the three-dot menu next to the location you want to edit
 3. Select **Reconfigure**
-4. Update any fields and submit — the integration reloads automatically
+4. Update any fields and submit. The integration reloads automatically
 
 ### Options
 
@@ -138,28 +140,30 @@ Access via the integration card > **Configure**:
 | Activity | Paddle Boarding | SUP or kayaking, each with its own profiles |
 | Profile | Recreational | Preset weight config for your paddling style |
 | Update interval | 10 min | How often to refresh data (5 to 60 minutes) |
-| Factor weights | Profile defaults | Adjust individual scoring weights (auto-normalized to 100%) |
+| Factor weights | Profile defaults | Adjust individual scoring weights (auto-normalized to 100%). Streamflow and tide weights come from the profile. |
+| USGS API key | None | Optional, free from [api.waterdata.usgs.gov](https://api.waterdata.usgs.gov/signup/). Lets river data refresh every 15 to 20 minutes instead of hourly. |
 
 ---
 
 ## Entities
 
-Each location creates 12 sensors:
+Each location creates 14 sensors:
 
 | Entity | Unit | Description |
 |--------|------|-------------|
 | `paddle_score` | % | Overall score (0 to 100) with Go/Caution/No-go rating |
+| `rating` | | Go, Caution, or No-go, as its own sensor for automations |
 | `wind_speed` | mph | Current wind speed |
 | `wind_gusts` | mph | Peak wind gusts |
-| `wind_direction` | ° | Wind bearing in degrees |
+| `wind_direction` | ° | Wind bearing in degrees (statistics average angles correctly) |
 | `air_temp` | °F | Air temperature |
 | `water_temp` | °F | Water temperature (requires USGS or NOAA station) |
 | `uv_index` | | UV radiation index |
 | `aqi` | AQI | US Air Quality Index |
 | `visibility` | mi | Atmospheric visibility |
 | `precipitation` | % | Precipitation probability |
-| `streamflow` | CFS | River flow rate (river locations only, requires USGS station) |
-| `condition` | | Weather description (e.g. "Clear sky", "Thunderstorm") |
+| `streamflow` | CFS | River flow rate (requires USGS station; enabled by default for new locations that have one) |
+| `condition` | | Weather conditions, translated (state values are keys like `partly_cloudy` or `thunderstorm`) |
 | `forecast_3hr` | | 3-hour forecast blocks with per-block scores and hourly data |
 
 ### Paddle score attributes
@@ -176,11 +180,12 @@ The `paddle_score` sensor exposes these attributes:
 ### Forecast attributes
 
 The `forecast_3hr` sensor provides:
-- Up to 8 forecast blocks (24 hours)
-- Each block has score, rating, wind, temperature, UV, precipitation, start/end times
+- Up to 8 forecast blocks (24 hours), starting at the current hour
+- Each block has score, rating, wind, gusts, temperature, UV, precipitation, start/end times
 - `best_block` and `best_score` answer "when should I go?"
-- Hourly arrays (`hourly_times`, `hourly_wind`, `hourly_temp`, `hourly_uv`, `hourly_precip`) for granular per-hour data
-- All times are in the location's local timezone
+- Hourly arrays (`hourly_times`, `hourly_wind`, `hourly_gusts`, `hourly_temp`, `hourly_uv`, `hourly_precip`) for 48 hours of per-hour data
+- All times are ISO 8601 in UTC with an explicit offset; Home Assistant and the cards show them in your local time
+- These attributes are left out of the recorder database
 
 ---
 
@@ -213,21 +218,21 @@ The integration bundles two custom Lovelace cards and a service action that gene
 
 ### Cards
 
-**`paddle-score-card`** — The main card for each location. Shows:
+**`paddle-score-card`**: The main card for each location. Shows:
 - Hero section with paddle score, Go/Caution/No-go rating, and date
 - Best time to paddle (filtered to daylight hours, at least 2 hours before sunset)
 - Factor grid (wind, AQI, temperature, UV, visibility, precipitation) with score bars
 - Tap any factor tile to expand hourly forecasts (sunrise-1h to sunset+1h)
-- Tap the score header to open a detail overlay with stacked SVG line charts for paddle score, wind speed/gusts, air/water temperature, UV index, and precipitation — all on a sunrise-to-sunset timeline
+- Tap the score header to open a detail overlay with stacked SVG line charts for paddle score, wind speed/gusts, air/water temperature, UV index, and precipitation, all on a sunrise-to-sunset timeline
 - 3-hour forecast timeline with per-block scores, wind, and temperature
 
-**`paddle-spots-card`** — Multi-location comparison card with color-coded score badges. Useful when you have several spots and want to see at a glance which one is best today.
+**`paddle-spots-card`**: Multi-location comparison card with color-coded score badges. Useful when you have several spots and want to see at a glance which one is best today.
 
 ### Getting the dashboard
 
 1. Go to **Developer Tools > Actions** (may be labeled "Services" in older versions)
 2. Search for `paddle_conditions.get_dashboard_yaml`
-3. Click **Perform action** — the response contains your complete dashboard config
+3. Click **Perform action**. The response contains your complete dashboard config
 4. Copy the entire response
 5. Go to **Settings > Dashboards > Add Dashboard > From scratch**
 6. Open the new dashboard, click the three-dot menu > **Edit Dashboard** > three-dot menu > **Raw configuration editor**
@@ -239,18 +244,65 @@ The dashboard is generated from your current locations. If you add or remove a l
 
 ## Data sources
 
-All APIs are free, public, and need no authentication.
+All APIs are free and public. None needs an account; USGS takes an optional free key.
 
 | Source | Data | Required |
 |--------|------|----------|
-| [Open-Meteo Weather](https://open-meteo.com/) | Wind, temperature, UV, visibility, precipitation, weather codes, 48-hour hourly forecast (local timezone) | Yes |
+| [Open-Meteo Weather](https://open-meteo.com/) | Wind, gusts, temperature, UV, visibility, precipitation, weather codes, 48-hour hourly forecast | Yes |
 | [Open-Meteo Air Quality](https://open-meteo.com/) | US AQI, PM2.5, PM10, ozone | Yes |
-| [USGS Water Services](https://waterservices.usgs.gov/) | Water temperature, streamflow (CFS) | No, river locations |
-| [NOAA CO-OPS](https://tidesandcurrents.noaa.gov/) | Water temperature, tide predictions | No, bay/ocean locations |
+| [USGS Water Data API](https://api.waterdata.usgs.gov/) | Water temperature, streamflow (CFS), refreshed hourly (every 15 to 20 minutes with a key) | No, river locations |
+| [NOAA CO-OPS](https://tidesandcurrents.noaa.gov/) | Water temperature | No, bay/ocean locations |
 
-Weather and AQI are required for scoring. Without them the integration won't produce a score.
+Weather is required for scoring. Without it the integration won't produce a score. Air quality is scored when available.
 
-USGS and NOAA are optional. If a station is unavailable, those factors drop out and weights renormalize automatically. All API calls run in parallel, both across data sources and across locations. Failed requests retry with exponential backoff. If APIs are unreachable on startup, the integration loads from cached data instead of blocking.
+USGS and NOAA are optional. If a station is unavailable, those factors drop out and weights renormalize automatically. All API calls run in parallel, both across data sources and across locations. Server errors are retried once with backoff. If the weather API is unreachable on startup, the integration loads a recent cached reading; with no recent cache it retries setup until the API answers.
+
+The tide factor exists in the scoring profiles but has no data source yet, so bay and ocean locations score without it.
+
+---
+
+## Automation example
+
+Get a phone notification when your spot turns Go on a weekend morning:
+
+```yaml
+automation:
+  - alias: "Lake Natoma is a go"
+    triggers:
+      - trigger: state
+        entity_id: sensor.lake_natoma_rating
+        to: "go"
+    conditions:
+      - condition: time
+        after: "06:00:00"
+        before: "11:00:00"
+        weekday: [sat, sun]
+    actions:
+      - action: notify.mobile_app_your_phone
+        data:
+          title: "Lake Natoma is a go"
+          message: >-
+            Score {{ states('sensor.lake_natoma_paddle_score') }},
+            wind {{ states('sensor.lake_natoma_wind_speed') }} mph.
+```
+
+---
+
+## Known limitations
+
+- **Tides aren't scored yet.** Bay and ocean locations score without a tide factor.
+- **USGS without a key refreshes hourly.** Keyless requests share a small per-network quota. Add a free key under **Configure** for updates every 15 to 20 minutes.
+- **US-centric water data.** USGS and NOAA stations only cover the United States. Weather and air quality work anywhere Open-Meteo does.
+- **Forecast scores leave out air quality and visibility.** Open-Meteo's hourly forecast for those isn't used yet, so forecast blocks score wind, gusts, temperature, UV and precipitation.
+
+---
+
+## Removing the integration
+
+1. Go to **Settings > Devices & services > Paddle Conditions**
+2. Open the three-dot menu and choose **Delete**. This removes every location, its entities, and the cached conditions.
+3. Optionally uninstall it from HACS and restart Home Assistant
+4. Remove the Paddle Conditions cards from any dashboards that used them
 
 ---
 
@@ -266,6 +318,9 @@ USGS and NOAA are optional. If a station is unavailable, those factors drop out 
 - Verify your station ID at [waterdata.usgs.gov](https://waterdata.usgs.gov) or [tidesandcurrents.noaa.gov](https://tidesandcurrents.noaa.gov)
 - Not all stations report all parameters. Check that yours provides the data you expect.
 
+### "USGS is rate limiting river data" repair
+- The USGS Water Data API limits keyless requests per network. Get a free key at [api.waterdata.usgs.gov/signup](https://api.waterdata.usgs.gov/signup/) and add it under **Configure > USGS API key**. The repair clears itself once USGS answers again.
+
 ### Score seems wrong
 - Check `limiting_factor` on the `paddle_score` entity. It tells you which condition is dragging the score down.
 - Review your profile weights in **Configure**. The default profile may not match how you paddle.
@@ -277,12 +332,7 @@ USGS and NOAA are optional. If a station is unavailable, those factors drop out 
 - Check the browser console (F12) for JavaScript errors.
 
 ### Cards show "Configuration error" on startup
-- This usually means the HA server was too busy to serve the card JavaScript while APIs were timing out. Version 1.0.4 fixed this by refreshing all locations in parallel and falling back to cached data when APIs are slow.
-- If you still see it, restart HA. Once the first successful fetch completes, cached data prevents this on future restarts.
-
-### Hourly temperatures seem wrong
-- Make sure you're on version 1.0.3 or later. Earlier versions fetched hourly data in UTC, causing temperature/wind values to be offset by your timezone difference.
-- After updating, restart HA and wait for the next data refresh.
+- This usually means the HA server was too busy to serve the card JavaScript while APIs were timing out. If you see it, restart HA. Once the first successful fetch completes, cached data prevents this on future restarts.
 
 ---
 

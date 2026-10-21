@@ -61,3 +61,42 @@ async def test_get_text_success(mock_session):
     client = BaseAPIClient(mock_session)
     result = await client._get_text("https://example.com/api")
     assert result == "hello"
+
+
+async def test_retries_once_on_5xx_then_raises(mock_session):
+    """A 5xx is retried; if the retry also fails, APIError carries the last error."""
+    from unittest.mock import patch
+
+    from custom_components.paddle_conditions.api.base import APIError, BaseAPIClient
+
+    from .conftest import mock_get_error
+
+    mock_session.get = mock_get_error(503, "Service Unavailable")
+    client = BaseAPIClient(mock_session)
+    with patch("custom_components.paddle_conditions.api.base.asyncio.sleep"), pytest.raises(APIError, match="503"):
+        await client._get_json("https://example.invalid")
+    assert mock_session.get.call_count == 2
+
+
+@pytest.mark.parametrize(("header", "expected"), [("30", 30.0), ("Wed, 21 Oct 2026 07:28:00 GMT", None), ("-5", None)])
+async def test_rate_limit_retry_after_parsing(mock_session, header, expected):
+    from custom_components.paddle_conditions.api.base import BaseAPIClient, RateLimitedError
+
+    from .conftest import mock_get_error
+
+    mock_session.get = mock_get_error(429, "Too Many Requests", headers={"Retry-After": header})
+    with pytest.raises(RateLimitedError) as err:
+        await BaseAPIClient(mock_session)._get_json("https://example.invalid")
+    assert err.value.retry_after == expected
+
+
+async def test_connection_error_becomes_api_error(mock_session):
+    from aiohttp import ClientConnectionError
+
+    from custom_components.paddle_conditions.api.base import APIError, BaseAPIClient
+
+    from .conftest import MockAsyncContextManager
+
+    mock_session.get = MagicMock(return_value=MockAsyncContextManager(side_effect=ClientConnectionError("refused")))
+    with pytest.raises(APIError, match="refused"):
+        await BaseAPIClient(mock_session)._get_json("https://example.invalid")

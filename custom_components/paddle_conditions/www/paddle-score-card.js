@@ -22,6 +22,8 @@ class PaddleScoreCard extends HTMLElement {
   }
 
   _stateChanged(prev) {
+    // Always watch the configured score entity itself, even if it was renamed.
+    if (prev.states[this._config.entity] !== this._hass.states[this._config.entity]) return true;
     const base = this._config.entity.replace(/_paddle_score$/, "");
     const keys = [
       "paddle_score", "wind_speed", "wind_gusts", "wind_direction",

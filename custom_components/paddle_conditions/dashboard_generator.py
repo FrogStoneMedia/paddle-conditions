@@ -4,48 +4,34 @@ from __future__ import annotations
 
 from typing import Any
 
-from homeassistant.util import slugify
+from homeassistant.config_entries import ConfigSubentry
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 
-from .const import CONF_NAME, SUBENTRY_TYPE_LOCATION
-
-
-def _eid(location_slug: str, sensor_key: str) -> str:
-    """Build the expected entity ID for a location sensor."""
-    return f"sensor.{location_slug}_{sensor_key}"
+from .const import CONF_DISPLAY_ORDER, DOMAIN, SUBENTRY_TYPE_LOCATION
 
 
-def generate_dashboard(subentries: dict) -> dict[str, Any]:
-    """Generate complete dashboard config from configured subentries."""
-    locations: list[tuple[str, str]] = []
-    for subentry in subentries.values():
-        if subentry.subentry_type != SUBENTRY_TYPE_LOCATION:
-            continue
-        name = subentry.data.get(CONF_NAME, subentry.title)
-        slug = slugify(name)
-        locations.append((name, slug))
+def generate_dashboard(hass: HomeAssistant, subentries: list[ConfigSubentry]) -> dict[str, Any]:
+    """Build a dashboard with one score card per location, in display order.
 
-    if not locations:
-        return {"views": []}
+    Entity IDs come from the entity registry, so renamed entities still work.
+    Locations whose score entity isn't registered yet are skipped.
+    """
+    registry = er.async_get(hass)
+    locations = sorted(
+        (sub for sub in subentries if sub.subentry_type == SUBENTRY_TYPE_LOCATION),
+        key=lambda sub: (int(sub.data.get(CONF_DISPLAY_ORDER, 0)), sub.title.casefold()),
+    )
+    score_entities = [
+        entity_id
+        for sub in locations
+        if (entity_id := registry.async_get_entity_id("sensor", DOMAIN, f"{sub.subentry_id}_score"))
+    ]
 
     cards: list[dict[str, Any]] = []
-
-    # All spots at a glance (only if multiple locations)
-    if len(locations) > 1:
-        cards.append(
-            {
-                "type": "custom:paddle-spots-card",
-                "entities": [_eid(slug, "paddle_score") for _, slug in locations],
-            }
-        )
-
-    # Per-location score cards
-    for _name, slug in locations:
-        cards.append(
-            {
-                "type": "custom:paddle-score-card",
-                "entity": _eid(slug, "paddle_score"),
-            }
-        )
+    if len(score_entities) > 1:
+        cards.append({"type": "custom:paddle-spots-card", "entities": score_entities})
+    cards.extend({"type": "custom:paddle-score-card", "entity": entity_id} for entity_id in score_entities)
 
     return {
         "views": [
