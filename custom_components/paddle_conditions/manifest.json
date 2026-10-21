@@ -8,7 +8,8 @@
   "config_flow": true,
   "dependencies": [
     "frontend",
-    "http"
+    "http",
+    "lovelace"
   ],
   "documentation": "https://github.com/FrogStoneMedia/paddle-conditions",
   "integration_type": "service",
