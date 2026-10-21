@@ -47,6 +47,21 @@
       },
       "forecast_3hr": {
         "default": "mdi:chart-timeline-variant"
+      },
+      "river_stage": {
+        "default": "mdi:waves-arrow-up"
+      },
+      "reservoir_level": {
+        "default": "mdi:water-percent"
+      },
+      "dam_outflow": {
+        "default": "mdi:dam"
+      },
+      "turbidity": {
+        "default": "mdi:water-opacity"
+      },
+      "dissolved_oxygen": {
+        "default": "mdi:molecule"
       }
     }
   },

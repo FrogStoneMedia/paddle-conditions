@@ -81,6 +81,13 @@ class TestSensorDescriptions:
             "visibility",
             "precipitation",
             "streamflow",
+            "river_stage",
+            "reservoir_level",
+            "dam_outflow",
+            "turbidity",
+            "dissolved_oxygen",
+            "ph",
+            "conductivity",
             "condition",
             "forecast_3hr",
         }

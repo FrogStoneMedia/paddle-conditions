@@ -255,3 +255,33 @@ async def test_weights_saved_before_cdec_factors_still_score_them(hass: HomeAssi
     await hass.async_block_till_done()
 
     assert "reservoir_level" in _conditions(config_entry).score.factors
+
+
+@pytest.mark.parametrize("location_data", [RESERVOIR])
+async def test_cdec_sensors(hass: HomeAssistant, config_entry, aioclient_mock):
+    from homeassistant.helpers import entity_registry as er
+
+    _serve(aioclient_mock, {"FOL": [_record(15, 586200), _record(23, 3000)], "AFO": [_record(1, 6.25)]})
+    await setup_integration(hass, config_entry)
+
+    level = hass.states.get("sensor.folsom_lake_reservoir_level")
+    assert level.state == "60.0"
+    assert level.attributes["storage_acre_feet"] == 586200
+    assert hass.states.get("sensor.folsom_lake_dam_outflow").state == "3000.0"
+    # Metric test instance: feet shown as metres.
+    assert float(hass.states.get("sensor.folsom_lake_river_stage").state) == pytest.approx(6.25 * 0.3048, abs=0.01)
+    registry = er.async_get(hass)
+    for key in ("turbidity", "dissolved_oxygen", "ph", "conductivity"):
+        entity_id = registry.async_get_entity_id("sensor", "paddle_conditions", f"{LAKE_SUBENTRY_ID}_{key}")
+        assert registry.async_get(entity_id).disabled_by is er.RegistryEntryDisabler.INTEGRATION
+
+
+async def test_cdec_sensors_off_without_cdec_stations(hass: HomeAssistant, config_entry, mock_apis):
+    from homeassistant.helpers import entity_registry as er
+
+    await setup_integration(hass, config_entry)
+
+    registry = er.async_get(hass)
+    for key in ("river_stage", "reservoir_level", "dam_outflow"):
+        entity_id = registry.async_get_entity_id("sensor", "paddle_conditions", f"{LAKE_SUBENTRY_ID}_{key}")
+        assert registry.async_get(entity_id).disabled_by is er.RegistryEntryDisabler.INTEGRATION
