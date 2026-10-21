@@ -108,6 +108,9 @@ _SPOT_WATER_BODY_TYPES = {
 }
 
 
+CUSTOM_LABEL = "Custom location"
+
+
 def _spot_label(spot: CuratedSpot) -> str:
     place = ", ".join(part for part in (spot.county, spot.state) if part)
     return f"{spot.name} ({place})" if place else spot.name
@@ -154,9 +157,17 @@ class LocationSubentryFlow(ConfigSubentryFlow):
                 spots = []
             self._spots = {spot.slug: spot for spot in spots}
 
+        if self._spots:
+            labels = {_spot_label(spot): slug for slug, spot in self._spots.items()}
+        else:
+            labels = {str(data[CONF_NAME]): key for key, data in PRESET_LOCATIONS.items()}
+        labels[CUSTOM_LABEL] = PRESET_CUSTOM
+
         errors: dict[str, str] = {}
         if user_input is not None:
-            choice = user_input.get("preset", PRESET_CUSTOM)
+            # The picker submits labels (it displays values verbatim); slugs and keys work too.
+            submitted = user_input.get("preset", PRESET_CUSTOM)
+            choice = labels.get(submitted, submitted)
             self._preset_defaults = None
             if choice in self._spots:
                 try:
@@ -173,13 +184,8 @@ class LocationSubentryFlow(ConfigSubentryFlow):
             if not errors:
                 return await self.async_step_location()
 
-        if self._spots:
-            options = [SelectOptionDict(value=slug, label=_spot_label(spot)) for slug, spot in self._spots.items()]
-        else:
-            options = [
-                SelectOptionDict(value=key, label=str(data[CONF_NAME])) for key, data in PRESET_LOCATIONS.items()
-            ]
-        options.append(SelectOptionDict(value=PRESET_CUSTOM, label="Custom location"))
+        # The searchable picker shows the raw value, so the value is the readable label.
+        options = [SelectOptionDict(value=label, label=label) for label in labels]
 
         return self.async_show_form(
             step_id="user",

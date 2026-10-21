@@ -416,11 +416,24 @@ async def test_location_picker_is_searchable_list_of_curated_spots(hass: HomeAss
 
     selector = result["data_schema"].schema["preset"].config
     assert selector["custom_value"] is True
-    assert [(o["value"], o["label"]) for o in selector["options"]] == [
-        ("lake-natoma", "Lake Natoma (Sacramento, California)"),
-        ("lake-oroville-ca", "Lake Oroville (Butte, California)"),
-        ("custom", "Custom location"),
+    # The searchable picker displays values verbatim, so values are the labels.
+    assert [o["value"] for o in selector["options"]] == [
+        "Lake Natoma (Sacramento, California)",
+        "Lake Oroville (Butte, California)",
+        "Custom location",
     ]
+    assert all(o["label"] == o["value"] for o in selector["options"])
+
+
+async def test_picker_label_selects_the_spot(hass: HomeAssistant):
+    _, result = await _location_flow(hass)
+
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], user_input={"preset": "Lake Oroville (Butte, California)"}
+    )
+
+    assert result["step_id"] == "location"
+    assert _defaults(result)["name"] == "Lake Oroville"
 
 
 async def test_curated_spot_prefills_location_form(hass: HomeAssistant):
@@ -470,8 +483,8 @@ async def test_builtin_presets_when_paddle_conditions_is_unreachable(hass: HomeA
     _, result = await _location_flow(hass)
 
     options = [o["value"] for o in result["data_schema"].schema["preset"].config["options"]]
-    assert options[0] == "lake_natoma"
-    assert options[-1] == "custom"
+    assert options[0] == "Lake Natoma"
+    assert options[-1] == "Custom location"
 
     result = await hass.config_entries.subentries.async_configure(
         result["flow_id"], user_input={"preset": "lake_natoma"}
