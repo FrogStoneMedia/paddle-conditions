@@ -158,9 +158,10 @@ async def test_options_flow(hass: HomeAssistant):
     assert entry.options["update_interval"] == 15
     # Verify weights were normalized to sum to 1.0
     weights = entry.options["weights"]
-    # The seven slider weights normalize to 1.0; streamflow and tide are kept as-is
-    # and the scorer renormalizes per location.
-    sliders = {k: v for k, v in weights.items() if k not in ("streamflow", "tide")}
+    # The seven slider weights normalize to 1.0; weights with no slider (streamflow,
+    # tide, the CDEC factors) are kept as-is and the scorer renormalizes per location.
+    hidden = ("streamflow", "tide", "reservoir_level", "water_quality", "river_stage")
+    sliders = {k: v for k, v in weights.items() if k not in hidden}
     assert abs(sum(sliders.values()) - 1.0) < 0.001
     assert abs(weights["wind_speed"] - 0.30) < 0.01
 

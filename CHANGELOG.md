@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- Scores that land exactly on a half point now round up, as the Paddle Conditions app does. A few scores may read one point higher than in 2.0.0, and now match the app.
+
 ## 2.0.0
 
 Requires Home Assistant 2026.9 or later.

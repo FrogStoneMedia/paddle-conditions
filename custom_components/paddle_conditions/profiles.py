@@ -6,7 +6,10 @@ The scoring engine reads curve parameters from the active profile.
 
 Weights include streamflow and tide factors. These only activate when
 the location's water_body_type matches (river -> streamflow, bay_ocean -> tide).
+The CDEC factors (reservoir_level for lakes, river_stage for rivers,
+water_quality anywhere) only count when the location has CDEC data.
 Non-applicable factors are excluded and weights renormalize automatically.
+Values match the Paddle Conditions API (src/lib/profiles.ts).
 """
 
 from __future__ import annotations
@@ -36,8 +39,10 @@ class ProfileConfig:
     temp_curve: dict[str, float]
     # Keys: ideal_low, ideal_high, cold_marginal, cold_nogo, hot_marginal, hot_nogo
     weights: dict[str, float]
-    # Includes all 9 possible factors. Scoring engine filters by water_body_type.
+    # Includes all 12 possible factors. Scoring engine filters by water_body_type.
     vetoes: dict[str, float]
+    river_stage_inverted: bool = False
+    # True when higher river water is better (racing and river kayaking want flow).
 
 
 PROFILES: dict[str, dict[str, ProfileConfig]] = {
@@ -69,6 +74,9 @@ PROFILES: dict[str, dict[str, ProfileConfig]] = {
                 "precipitation": 0.05,
                 "streamflow": 0.15,
                 "tide": 0.10,
+                "reservoir_level": 0.10,
+                "water_quality": 0.10,
+                "river_stage": 0.10,
             },
             vetoes={
                 "wind_speed": 25,
@@ -105,6 +113,9 @@ PROFILES: dict[str, dict[str, ProfileConfig]] = {
                 "precipitation": 0.15,
                 "streamflow": 0.10,
                 "tide": 0.15,
+                "reservoir_level": 0.10,
+                "water_quality": 0.10,
+                "river_stage": 0.10,
             },
             vetoes={
                 "wind_speed": 30,
@@ -113,6 +124,7 @@ PROFILES: dict[str, dict[str, ProfileConfig]] = {
                 "visibility": 0.5,
                 "air_temp_min": 32,
             },
+            river_stage_inverted=True,
         ),
         PROFILE_FAMILY: ProfileConfig(
             curves={
@@ -141,6 +153,9 @@ PROFILES: dict[str, dict[str, ProfileConfig]] = {
                 "precipitation": 0.05,
                 "streamflow": 0.20,
                 "tide": 0.15,
+                "reservoir_level": 0.10,
+                "water_quality": 0.10,
+                "river_stage": 0.15,
             },
             vetoes={
                 "wind_speed": 18,
@@ -179,6 +194,9 @@ PROFILES: dict[str, dict[str, ProfileConfig]] = {
                 "precipitation": 0.10,
                 "streamflow": 0.15,
                 "tide": 0.10,
+                "reservoir_level": 0.10,
+                "water_quality": 0.10,
+                "river_stage": 0.10,
             },
             vetoes={
                 "wind_speed": 22,
@@ -215,6 +233,9 @@ PROFILES: dict[str, dict[str, ProfileConfig]] = {
                 "precipitation": 0.10,
                 "streamflow": 0.35,
                 "tide": 0.0,
+                "reservoir_level": 0.10,
+                "water_quality": 0.10,
+                "river_stage": 0.15,
             },
             vetoes={
                 "wind_speed": 35,
@@ -223,6 +244,7 @@ PROFILES: dict[str, dict[str, ProfileConfig]] = {
                 "visibility": 0.5,
                 "air_temp_min": 32,
             },
+            river_stage_inverted=True,
         ),
         PROFILE_OCEAN: ProfileConfig(
             curves={
@@ -251,6 +273,9 @@ PROFILES: dict[str, dict[str, ProfileConfig]] = {
                 "precipitation": 0.10,
                 "streamflow": 0.0,
                 "tide": 0.15,
+                "reservoir_level": 0.10,
+                "water_quality": 0.10,
+                "river_stage": 0.0,
             },
             vetoes={
                 "wind_speed": 35,

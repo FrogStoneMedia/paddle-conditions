@@ -46,11 +46,11 @@ def test_profile_weights_are_positive():
 
 
 def test_profile_total_weights_reasonable():
-    """Total of all 9 weights should be > 1.0 (renormalization handles it).
+    """Total of all 12 weights should be > 1.0 (renormalization handles it).
 
-    Profiles define weights for all 9 factors. Only applicable factors are
+    Profiles define weights for all 12 factors. Only applicable factors are
     included per water body type, then weights renormalize. The total across
-    all 9 exceeds 1.0 by design.
+    all 12 exceeds 1.0 by design.
     """
     for activity, profiles in PROFILES.items():
         for name, profile in profiles.items():
@@ -159,3 +159,23 @@ def test_all_profiles_have_temp_curve():
     for activity, profiles in PROFILES.items():
         for name, profile in profiles.items():
             assert required_keys == set(profile.temp_curve.keys()), f"{activity}/{name} temp_curve missing keys"
+
+
+# API parity: src/lib/profiles.ts in paddle-conditions-api
+CDEC_WEIGHTS = {
+    (ACTIVITY_SUP, PROFILE_RECREATIONAL): (0.10, 0.10, 0.10, False),
+    (ACTIVITY_SUP, PROFILE_RACING): (0.10, 0.10, 0.10, True),
+    (ACTIVITY_SUP, PROFILE_FAMILY): (0.10, 0.10, 0.15, False),
+    (ACTIVITY_KAYAKING, PROFILE_FLATWATER): (0.10, 0.10, 0.10, False),
+    (ACTIVITY_KAYAKING, PROFILE_RIVER): (0.10, 0.10, 0.15, True),
+    (ACTIVITY_KAYAKING, PROFILE_OCEAN): (0.10, 0.10, 0.0, False),
+}
+
+
+def test_profiles_match_api_cdec_weights():
+    for (activity, name), (reservoir, quality, stage, inverted) in CDEC_WEIGHTS.items():
+        profile = PROFILES[activity][name]
+        assert profile.weights["reservoir_level"] == reservoir, f"{activity}/{name}"
+        assert profile.weights["water_quality"] == quality, f"{activity}/{name}"
+        assert profile.weights["river_stage"] == stage, f"{activity}/{name}"
+        assert profile.river_stage_inverted is inverted, f"{activity}/{name}"

@@ -5,9 +5,20 @@ Pure functions — no Home Assistant dependencies.
 
 from __future__ import annotations
 
+import math
+from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any
 
 from .models import PaddleScore
+
+
+def _round_half_up(value: float) -> int:
+    """Round .5 up like JavaScript's Math.round, so scores match the Paddle Conditions API.
+
+    Python's round() rounds half to even (92.5 -> 92); the API gives 93.
+    """
+    return math.floor(value + 0.5)
 
 
 def _linear_score(value: float, ideal_max: float, marginal: float, nogo: float) -> int:
@@ -20,8 +31,8 @@ def _linear_score(value: float, ideal_max: float, marginal: float, nogo: float) 
     if value >= nogo:
         return 0
     if value <= marginal:
-        return round(100 - 50 * (value - ideal_max) / (marginal - ideal_max))
-    return round(50 * (nogo - value) / (nogo - marginal))
+        return _round_half_up(100 - 50 * (value - ideal_max) / (marginal - ideal_max))
+    return _round_half_up(50 * (nogo - value) / (nogo - marginal))
 
 
 def _linear_score_inverted(
@@ -36,8 +47,8 @@ def _linear_score_inverted(
     if value <= nogo:
         return 0
     if value >= marginal:
-        return round(100 - 50 * (ideal_min - value) / (ideal_min - marginal))
-    return round(50 * (value - nogo) / (marginal - nogo))
+        return _round_half_up(100 - 50 * (ideal_min - value) / (ideal_min - marginal))
+    return _round_half_up(50 * (value - nogo) / (marginal - nogo))
 
 
 def score_wind_speed(
@@ -163,8 +174,8 @@ def score_streamflow(
     if 0.8 <= ratio <= 1.2:
         return 100
     if ratio > 1.2:
-        return max(0, round(100 - 100 * (ratio - 1.2) / 2.8))
-    return max(0, round(100 * (ratio - 0.1) / 0.7))
+        return max(0, _round_half_up(100 - 100 * (ratio - 1.2) / 2.8))
+    return max(0, _round_half_up(100 * (ratio - 0.1) / 0.7))
 
 
 def score_tide(
@@ -177,6 +188,73 @@ def score_tide(
     if value is None:
         return None
     return _linear_score(abs(value), ideal_max=ideal_max, marginal=marginal, nogo=nogo)
+
+
+# ============================================================================
+# CDEC factors (California reservoirs and rivers); ported from the API
+# ============================================================================
+
+MIN_STAGE_SAMPLES = 60
+
+
+@dataclass(frozen=True)
+class StageBaseline:
+    """Historical river-stage percentiles (ft) for a gauge."""
+
+    p10: float
+    p25: float
+    p50: float
+    p75: float
+    p90: float
+    p95: float
+    sample_count: int
+
+    @property
+    def reliable(self) -> bool:
+        """Enough history to judge a stage as high or low."""
+        return self.sample_count >= MIN_STAGE_SAMPLES
+
+
+def score_reservoir_level(storage_af: float | None, capacity_af: float | None) -> int | None:
+    """100 at or above 60% full, 0 at or below 20%, linear between."""
+    if storage_af is None or capacity_af is None or capacity_af <= 0:
+        return None
+    pct = storage_af / capacity_af * 100
+    if pct >= 60:
+        return 100
+    if pct <= 20:
+        return 0
+    return _round_half_up(100 * (pct - 20) / 40)
+
+
+def score_river_stage(stage_ft: float | None, baseline: StageBaseline | None, inverted: bool) -> int | None:
+    """Lower is better from the median (p50/p75/p90); inverted profiles want higher water (p50/p25/p10)."""
+    if stage_ft is None or baseline is None or not baseline.reliable:
+        return None
+    if inverted:
+        return _linear_score_inverted(stage_ft, baseline.p50, baseline.p25, baseline.p10)
+    return _linear_score(stage_ft, baseline.p50, baseline.p75, baseline.p90)
+
+
+def score_water_quality(wq: Mapping[str, float | None]) -> int | None:
+    """Mean of turbidity, dissolved oxygen, pH and conductivity sub-scores, for those reported."""
+    scores: list[int] = []
+    if (turbidity := wq.get("turbidity_ntu")) is not None:
+        scores.append(_linear_score(turbidity, 10, 50, 100))
+    if (oxygen := wq.get("dissolved_oxygen_mg_l")) is not None:
+        scores.append(_linear_score_inverted(oxygen, 6, 4, 2))
+    if (ph := wq.get("ph")) is not None:
+        if 6.5 <= ph <= 8.5:
+            scores.append(100)
+        elif ph < 6.5:
+            scores.append(_linear_score_inverted(ph, 6.5, 6.0, 5.0))
+        else:
+            scores.append(_linear_score(ph, 8.5, 9.0, 10.0))
+    if (conductivity := wq.get("conductivity_us")) is not None:
+        scores.append(_linear_score(conductivity, 1000, 2000, 3000))
+    if not scores:
+        return None
+    return _round_half_up(sum(scores) / len(scores))
 
 
 # ============================================================================
@@ -236,6 +314,18 @@ _BASE_FACTOR_SCORERS: dict[str, Any] = {
 }
 
 
+def _veto(reason: str) -> PaddleScore:
+    return PaddleScore(
+        value=0,
+        rating="NO_GO",
+        limiting_factor=None,
+        factors={},
+        missing_factors=[],
+        vetoed=True,
+        veto_reason=reason,
+    )
+
+
 def compute_paddle_score(
     *,
     wind_speed: float | None,
@@ -254,6 +344,14 @@ def compute_paddle_score(
     curves: dict[str, tuple[float, float, float]] | None = None,
     temp_curve: dict[str, float] | None = None,
     veto_thresholds: dict[str, float] | None = None,
+    reservoir_storage_af: float | None = None,
+    reservoir_capacity_af: float | None = None,
+    river_stage_ft: float | None = None,
+    stage_baseline: StageBaseline | None = None,
+    stage_inverted: bool = False,
+    water_quality: Mapping[str, float | None] | None = None,
+    dam_outflow_cfs: float | None = None,
+    dam_outflow_threshold_cfs: float | None = None,
 ) -> PaddleScore:
     """Compute the paddle score from raw condition values.
 
@@ -327,6 +425,38 @@ def compute_paddle_score(
         else:
             missing.append("tide")
 
+    # CDEC vetoes and factors, in the API's order.
+    if (
+        dam_outflow_cfs is not None
+        and dam_outflow_threshold_cfs is not None
+        and dam_outflow_cfs > dam_outflow_threshold_cfs
+    ):
+        return _veto(f"High dam release: {dam_outflow_cfs:g} CFS exceeds {dam_outflow_threshold_cfs:g} CFS threshold")
+    if (
+        river_stage_ft is not None
+        and stage_baseline is not None
+        and stage_baseline.reliable
+        and river_stage_ft >= stage_baseline.p95
+    ):
+        return _veto("Dangerous water level")
+
+    if water_body_type == "lake" and weights.get("reservoir_level"):
+        level = score_reservoir_level(reservoir_storage_af, reservoir_capacity_af)
+        if level is not None:
+            factor_scores["reservoir_level"] = level
+        elif reservoir_capacity_af is not None:
+            missing.append("reservoir_level")
+    if water_quality and weights.get("water_quality"):
+        quality = score_water_quality(water_quality)
+        if quality is not None:
+            factor_scores["water_quality"] = quality
+    if water_body_type == "river" and weights.get("river_stage"):
+        stage = score_river_stage(river_stage_ft, stage_baseline, stage_inverted)
+        if stage is not None:
+            factor_scores["river_stage"] = stage
+        elif river_stage_ft is not None:
+            missing.append("river_stage")
+
     # Determine applicable factors
     applicable_factors = set(raw_values.keys())
     if water_body_type == "river":
@@ -360,7 +490,7 @@ def compute_paddle_score(
         )
     weighted_sum = sum(factor_scores[k] * (v / total_weight) for k, v in available_weights.items())
 
-    score_value = round(weighted_sum)
+    score_value = _round_half_up(weighted_sum)
     if score_value >= 70:
         rating = "GO"
     elif score_value >= 40:

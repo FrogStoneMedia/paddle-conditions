@@ -240,7 +240,7 @@ class PaddleOptionsFlow(OptionsFlow):
                 total = sum(user_input[k] for k in weight_keys)
                 if total > 0:
                     sliders = {k.removeprefix("weight_"): user_input.pop(k) / total for k in weight_keys}
-                    # Streamflow and tide have no slider; keep their current weights,
+                    # Streamflow, tide and the CDEC factors have no slider; keep their current weights,
                     # falling back to the profile's for any that are missing.
                     stored = {**profile_weights, **current.get("weights", {})}
                     hidden = {k: v for k, v in stored.items() if k not in sliders}
