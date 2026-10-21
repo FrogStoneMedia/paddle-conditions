@@ -8,9 +8,14 @@ Requires Home Assistant 2026.9 or later.
 - Conditions sensor states are now keys such as `partly_cloudy` instead of English text. The displayed text is unchanged and now translatable. Update automations that compared against the old text.
 - Cloud sync is removed. It posted to an endpoint the Paddle Conditions API no longer has, so it never worked; the saved URL and token are deleted on upgrade.
 - 3-Hour Forecast is enabled by default and no longer a diagnostic entity. Streamflow is enabled for locations with a USGS station. On upgrade, these sensors are enabled if the old defaults disabled them; ones you disabled yourself stay disabled.
-- Forecast attributes (`blocks`, `best_block`, `best_score` and the `hourly_*` arrays) are no longer written to the recorder. Live attributes are unchanged, but history graphs and statistics of those attributes stop growing.
+- The paddle-spots-card opens a location's details when tapped instead of scrolling to its card.
+- Forecast attributes (`blocks`, `best_block`, `best_score`, `daylight` and the `hourly_*` arrays) are no longer written to the recorder. Live attributes are unchanged, but history graphs and statistics of those attributes stop growing.
 
 ### Added
+- Six dashboard cards in one bundle: score, spots, factors, forecast, chart and history, with visual editors and sections-view sizing. Existing `paddle-score-card` and `paddle-spots-card` dashboards keep working.
+- Forecast blocks now score hourly air quality and visibility, like the current score does, and the profile vetoes for poor air and low visibility apply to each block
+- Picking a Paddle Score sensor in the card picker suggests the Paddle cards
+- Each location's own sunrise and sunset, used for "best time"
 - Rating sensor (Go / Caution / No-go) for automations
 - Optional free USGS API key for faster river updates (every 15 to 20 minutes instead of hourly)
 - Repair issue when USGS rate limits your network, cleared automatically on recovery
@@ -27,6 +32,13 @@ Requires Home Assistant 2026.9 or later.
 - Diagnostics redact coordinates, location names and the USGS key, and show which sources are failing
 
 ### Fixed
+- Cards showed °F and mph on metric systems, and used the Home Assistant home's sunrise instead of the spot's
+- The card details overlay could get stuck invisible over the dashboard and didn't keep keyboard focus inside it
+- Rating colours failed contrast on some backgrounds; spots-card scores were nearly unreadable on their badges
+- The spots card couldn't navigate to a location's card
+- The history card could stay on its loading placeholder
+- A 223 KB unused card bundle was shipped to every install
+- Adding two locations back to back left the second without sensors until restart
 - The 3-hour forecast showed blocks from earlier in the day
 - Rain chance had no effect on forecast block scores
 - Saving options removed the streamflow and tide weights, so river locations stopped scoring flow. Weights lost this way are restored on upgrade.

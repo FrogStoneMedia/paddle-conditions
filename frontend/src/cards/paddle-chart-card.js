@@ -1,368 +1,257 @@
-import { CARD_STYLES } from "../styles/theme.js";
-import { ensureChartReady, Chart } from "../charts/chart-loader.js";
-import {
-  CHART_METRICS,
-  formatTimestamp,
-  getThresholdGridColor,
-  createScoreGradient,
-  resolveHAColor,
-} from "../charts/chart-utils.js";
+// Paddle Chart card: score over the next 24 hours with optional wind,
+// temperature, UV and rain layers (Chart.js).
 
-const STYLES = `
-  ${CARD_STYLES}
-  .chart-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 8px;
-  }
-  .chart-title {
-    font-size: 1.1em;
-    font-weight: 600;
-  }
-  .metric-chips {
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
-    margin-bottom: 12px;
-  }
-  .metric-chip {
-    padding: 3px 10px;
-    border-radius: 12px;
-    font-size: 0.8em;
-    font-weight: 500;
-    cursor: pointer;
-    user-select: none;
-    border: 1px solid;
-    transition: background 0.2s, opacity 0.2s;
-  }
-  .metric-chip.active {
-    color: white;
-  }
-  .metric-chip.inactive {
-    background: transparent;
-    opacity: 0.6;
-  }
-  .chart-container {
-    position: relative;
-    width: 100%;
-    height: 200px;
-  }
-  .chart-container canvas {
-    width: 100% !important;
-    height: 100% !important;
-  }
-  .chart-skeleton {
-    width: 100%;
-    height: 100%;
-    background: var(--secondary-background-color, #f0f0f0);
-    border-radius: 8px;
-    animation: pulse 1.5s ease-in-out infinite;
-  }
-  @keyframes pulse {
-    0%, 100% { opacity: 0.6; }
-    50% { opacity: 0.3; }
-  }
-  .chart-legend {
-    display: flex;
-    gap: 12px;
-    justify-content: center;
-    margin-top: 8px;
-    font-size: 0.8em;
-    color: var(--secondary-text-color, #757575);
-  }
-  .legend-item {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-  }
-`;
+import { ensureChartReady, Chart } from "../charts/chart-loader.js";
+import { getThresholdGridColor, createScoreGradient, resolveHAColor } from "../charts/chart-utils.js";
+import { PaddleLocation, scoreEntities, signatureChanged, DOMAIN } from "../lib/entities.js";
+import { convertSeries, displayUnit } from "../lib/units.js";
+import { applyTheme, onSeriesFill, seriesColors } from "../lib/theme.js";
+import { formatHour } from "../lib/time.js";
+import { el, button, prefersReducedMotion, SR_ONLY_CSS } from "../lib/dom.js";
+import { dataTable } from "../lib/table.js";
+
+// Colours come from the theme's series palette (>= 3:1 on the plot, and the
+// pressed toggle's text colour is chosen for 4.5:1 on top of them).
+const LAYERS = {
+  wind: { label: "Wind", series: "wind" },
+  temp: { label: "Temp", series: "temp" },
+  uv: { label: "UV", series: "uv" },
+  rain: { label: "Rain", series: "flow" },
+};
+const HOURS = 24;
 
 class PaddleChartCard extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
-    this._config = {};
     this._chart = null;
-    this._activeMetrics = new Set(["score"]);
+  }
+
+  static getStubConfig(hass) {
+    return { entity: scoreEntities(hass)[0] || "" };
+  }
+
+  static getConfigForm() {
+    return {
+      schema: [
+        { name: "entity", required: true, selector: { entity: { filter: [{ integration: DOMAIN, domain: "sensor" }] } } },
+        { name: "name", selector: { text: {} } },
+        {
+          name: "default_metrics",
+          selector: { select: { multiple: true, mode: "list", options: Object.entries(LAYERS).map(([value, l]) => ({ value, label: l.label })) } },
+        },
+      ],
+      computeLabel: (s) => ({ entity: "Paddle Score sensor", name: "Title", default_metrics: "Layers shown by default" })[s.name],
+    };
   }
 
   setConfig(config) {
-    if (!config.entity) {
-      throw new Error("Please define an entity");
-    }
-    this._config = { ...config };
-    if (config.default_metrics) {
-      this._activeMetrics = new Set(config.default_metrics);
-    }
+    if (!config?.entity) throw new Error("Choose a Paddle Score sensor");
+    this._config = config;
+    this._active = new Set((config.default_metrics || []).filter((k) => k in LAYERS));
+    this._location = null;
+    this._signature = null;
+    this._chart?.destroy();
+    this._chart = null;
+    this._built = false;
+    if (this._hass) this.hass = this._hass; // Rebuild the location and render now.
   }
 
   set hass(hass) {
-    const entity = hass.states[this._config.entity];
-    const newState = entity
-      ? `${entity.state}|${JSON.stringify(entity.attributes)}`
-      : "";
-    if (this._lastState === newState) return;
-    this._lastState = newState;
     this._hass = hass;
-    this._render();
+    if (!this._config) return;
+    if (!this._location || this._location.hass.entities !== hass.entities) this._location = new PaddleLocation(hass, this._config.entity);
+    this._location.hass = hass;
+    const sig = this._location.signature(hass);
+    const dark = Boolean(hass.themes?.darkMode);
+    if (!signatureChanged(this._signature, sig) && dark === this._dark) return;
+    if (dark !== this._dark && this._built) this._restyle();
+    this._signature = sig;
+    this._dark = dark;
+    this._update();
   }
 
   getCardSize() {
-    return 4;
+    return 5;
   }
 
-  static getStubConfig() {
-    return { entity: "", default_metrics: ["score"] };
-  }
-
-  static getConfigElement() {
-    return document.createElement("paddle-chart-editor");
-  }
-
-  _toggleMetric(key) {
-    if (key === "score") return;
-    if (this._activeMetrics.has(key)) {
-      this._activeMetrics.delete(key);
-    } else {
-      this._activeMetrics.add(key);
-    }
-    this._render();
-  }
-
-  _render() {
-    const entity = this._hass.states[this._config.entity];
-    const root = this.shadowRoot;
-
-    if (this._chart) {
-      this._chart.destroy();
-      this._chart = null;
-    }
-    root.textContent = "";
-
-    const style = document.createElement("style");
-    style.textContent = STYLES;
-
-    const card = document.createElement("ha-card");
-
-    if (!entity) {
-      const empty = document.createElement("div");
-      empty.className = "empty-state";
-      empty.textContent = `Entity not found: ${this._config.entity}`;
-      card.appendChild(empty);
-      root.append(style, card);
-      return;
-    }
-
-    const blocks = entity.attributes.blocks;
-    if (!blocks || !blocks.length) {
-      const empty = document.createElement("div");
-      empty.className = "empty-state";
-      empty.textContent = "No forecast data available";
-      card.appendChild(empty);
-      root.append(style, card);
-      return;
-    }
-
-    // Header
-    const header = document.createElement("div");
-    header.className = "chart-header";
-    const title = document.createElement("div");
-    title.className = "chart-title";
-    title.textContent = this._config.name || "Forecast";
-    header.appendChild(title);
-    card.appendChild(header);
-
-    // Metric toggle chips
-    const chips = document.createElement("div");
-    chips.className = "metric-chips";
-    chips.setAttribute("role", "group");
-    chips.setAttribute("aria-label", "Chart data layers");
-    for (const [key, meta] of Object.entries(CHART_METRICS)) {
-      const isActive = this._activeMetrics.has(key);
-      const chip = document.createElement("span");
-      chip.className = `metric-chip ${isActive ? "active" : "inactive"}`;
-      chip.style.borderColor = meta.color;
-      if (isActive) {
-        chip.style.background = meta.color;
-      }
-      chip.textContent = meta.label;
-      chip.setAttribute("role", "button");
-      chip.setAttribute("tabindex", key === "score" ? "-1" : "0");
-      chip.setAttribute("aria-pressed", String(isActive));
-      chip.setAttribute("aria-label", `Toggle ${meta.label} ${key === "score" ? "(always on)" : ""}`);
-      if (key !== "score") {
-        chip.addEventListener("click", () => this._toggleMetric(key));
-        chip.addEventListener("keydown", (e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            this._toggleMetric(key);
-          }
-        });
-      }
-      chips.appendChild(chip);
-    }
-    card.appendChild(chips);
-
-    // Chart canvas
-    const container = document.createElement("div");
-    container.className = "chart-container";
-    container.setAttribute("role", "img");
-    container.setAttribute("aria-label", `${this._config.name || "Forecast"} chart showing ${[...this._activeMetrics].join(", ")} over time`);
-    const canvas = document.createElement("canvas");
-    canvas.setAttribute("aria-hidden", "true");
-    container.appendChild(canvas);
-    card.appendChild(container);
-
-    // Axis legend
-    const legend = document.createElement("div");
-    legend.className = "chart-legend";
-    const leftLabel = document.createElement("span");
-    leftLabel.className = "legend-item";
-    leftLabel.textContent = "\u2190 Score (0-100)";
-    legend.appendChild(leftLabel);
-
-    const activeRight = Object.entries(CHART_METRICS)
-      .filter(([k]) => k !== "score" && this._activeMetrics.has(k))
-      .map(([, m]) => m.label);
-    if (activeRight.length > 0) {
-      const rightLabel = document.createElement("span");
-      rightLabel.className = "legend-item";
-      rightLabel.textContent = `${activeRight.join(", ")} \u2192`;
-      legend.appendChild(rightLabel);
-    }
-    card.appendChild(legend);
-
-    root.append(style, card);
-
-    ensureChartReady();
-    this._buildChart(canvas, blocks);
-  }
-
-  _buildChart(canvas, blocks) {
-    const labels = blocks.map((b) => b.start);
-    const datasets = [];
-
-    // Score dataset (always)
-    datasets.push({
-      label: "Score",
-      data: blocks.map((b) => b.score),
-      borderColor: "#4CAF50",
-      backgroundColor: (ctx) => createScoreGradient(ctx),
-      fill: true,
-      tension: 0.3,
-      pointRadius: 3,
-      pointHoverRadius: 5,
-      yAxisID: "y",
-    });
-
-    if (this._activeMetrics.has("wind")) {
-      datasets.push({
-        label: "Wind (mph)",
-        data: blocks.map((b) => b.wind_mph),
-        borderColor: CHART_METRICS.wind.color,
-        borderDash: CHART_METRICS.wind.dash,
-        fill: false,
-        tension: 0.3,
-        pointRadius: 2,
-        yAxisID: "y1",
-      });
-    }
-
-    if (this._activeMetrics.has("temp")) {
-      datasets.push({
-        label: "Temp (\u00B0F)",
-        data: blocks.map((b) => b.temp_f),
-        borderColor: CHART_METRICS.temp.color,
-        borderDash: CHART_METRICS.temp.dash,
-        fill: false,
-        tension: 0.3,
-        pointRadius: 2,
-        yAxisID: "y1",
-      });
-    }
-
-    if (this._activeMetrics.has("uv")) {
-      datasets.push({
-        label: "UV",
-        data: blocks.map((b) => b.uv),
-        borderColor: CHART_METRICS.uv.color,
-        borderDash: CHART_METRICS.uv.dash,
-        fill: false,
-        tension: 0.3,
-        pointRadius: 2,
-        yAxisID: "y1",
-      });
-    }
-
-    const hasRightAxis = datasets.length > 1;
-
-    this._chart = new Chart(canvas, {
-      type: "line",
-      data: { labels, datasets },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: {
-          mode: "index",
-          intersect: false,
-        },
-        plugins: {
-          legend: { display: false },
-          tooltip: {
-            callbacks: {
-              title: (items) => formatTimestamp(items[0].label, "forecast"),
-            },
-          },
-        },
-        scales: {
-          x: {
-            type: "time",
-            time: { unit: "hour" },
-            grid: { display: false },
-            ticks: {
-              color: resolveHAColor(this, "--secondary-text-color", "#757575"),
-            },
-          },
-          y: {
-            position: "left",
-            min: 0,
-            max: 100,
-            grid: {
-              color: (ctx) => getThresholdGridColor(ctx.tick.value),
-            },
-            ticks: {
-              color: resolveHAColor(this, "--secondary-text-color", "#757575"),
-            },
-          },
-          ...(hasRightAxis
-            ? {
-                y1: {
-                  position: "right",
-                  grid: { display: false },
-                  ticks: {
-                    color: resolveHAColor(
-                      this,
-                      "--secondary-text-color",
-                      "#757575"
-                    ),
-                  },
-                },
-              }
-            : {}),
-        },
-      },
-    });
+  getGridOptions() {
+    return { columns: 12, min_columns: 6, rows: 5, min_rows: 4 };
   }
 
   disconnectedCallback() {
-    if (this._chart) {
-      this._chart.destroy();
-      this._chart = null;
+    this._chart?.destroy();
+    this._chart = null;
+    this._built = false;
+  }
+
+  connectedCallback() {
+    if (this._hass && this._config && !this._built) {
+      this._signature = null;
+      this._update();
     }
+  }
+
+  _series() {
+    const forecast = this._location.state("forecast_3hr");
+    const a = forecast?.attributes || {};
+    const n = Math.min(HOURS, a.hourly_times?.length || 0);
+    const times = (a.hourly_times || []).slice(0, n).map((t) => new Date(t));
+    const blocks = a.blocks || [];
+    const score = times.map((t) => blocks.find((b) => t >= new Date(b.start) && t < new Date(b.end))?.score ?? null);
+    const speedUnit = displayUnit(this._location.state("wind_speed"), "speed");
+    const tempUnit = displayUnit(this._location.state("air_temp"), "temperature");
+    return {
+      forecast,
+      times,
+      score,
+      units: { wind: speedUnit, temp: tempUnit, uv: "", rain: "%" },
+      wind: convertSeries((a.hourly_wind || []).slice(0, n), "speed", speedUnit),
+      temp: convertSeries((a.hourly_temp || []).slice(0, n), "temperature", tempUnit),
+      uv: (a.hourly_uv || []).slice(0, n),
+      rain: (a.hourly_precip || []).slice(0, n),
+    };
+  }
+
+  _update() {
+    if (!this._hass || !this._location) return;
+    applyTheme(this, this._hass);
+    const s = this._series();
+    if (!s.times.length) {
+      this._chart?.destroy();
+      this._chart = null;
+      this._built = false;
+      const msg = s.forecast ? "No forecast yet." : "Enable the 3-Hour Forecast sensor for this location.";
+      this.shadowRoot.replaceChildren(el("style", { text: STYLES }), el("ha-card", {}, [this._title(), el("p", { className: "empty", text: msg })]));
+      return;
+    }
+    if (!this._built) {
+      // Chart.js measures and observes its container, so build once attached.
+      if (!this.isConnected) return;
+      this._build();
+    }
+    this._renderTable(s);
+    this._applyData(s);
+  }
+
+  _title() {
+    return el("h2", { className: "title", text: this._config.name || "Paddle forecast" });
+  }
+
+  _build() {
+    const toggles = el("div", { className: "layers", role: "group", "aria-label": "Chart layers" });
+    for (const [key, layer] of Object.entries(LAYERS)) {
+      toggles.append(
+        button(
+          {
+            className: "layer",
+            "aria-pressed": String(this._active.has(key)),
+            "data-layer": key,
+            onClick: (e) => {
+              if (this._active.has(key)) this._active.delete(key);
+              else this._active.add(key);
+              e.currentTarget.setAttribute("aria-pressed", String(this._active.has(key)));
+              this._applyData(this._series());
+              this._renderTable(this._series());
+            },
+          },
+          layer.label,
+        ),
+      );
+    }
+    this._canvas = el("canvas", { "aria-hidden": "true" });
+    this._tableSlot = el("div");
+    this._status = el("p", { className: "sr-only", "aria-live": "polite" });
+    this.shadowRoot.replaceChildren(
+      el("style", { text: STYLES }),
+      el("ha-card", {}, [this._title(), toggles, el("div", { className: "chart" }, this._canvas), this._tableSlot, this._status]),
+    );
+    ensureChartReady();
+    const text = resolveHAColor(this, "--secondary-text-color", "#757575");
+    this._restyleToggles();
+    this._chart = new Chart(this._canvas, {
+      type: "line",
+      data: { labels: [], datasets: [] },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: prefersReducedMotion() ? false : { duration: 300 },
+        interaction: { mode: "index", intersect: false },
+        plugins: { legend: { display: false }, tooltip: { callbacks: { title: (items) => formatHour(this._hass, new Date(items[0].parsed.x)) } } },
+        scales: {
+          x: { type: "time", time: { unit: "hour" }, grid: { display: false }, ticks: { color: text, maxTicksLimit: 6, callback: (v) => formatHour(this._hass, new Date(v)) } },
+          y: { position: "left", min: 0, max: 100, title: { display: true, text: "Score", color: text }, grid: { color: (ctx) => getThresholdGridColor(ctx.tick.value) }, ticks: { color: text } },
+          y1: { position: "right", display: false, grid: { display: false }, ticks: { color: text } },
+        },
+      },
+    });
+    this._built = true;
+  }
+
+  /** Theme changed: recolour toggles and axes in place. */
+  _restyle() {
+    this._restyleToggles();
+    if (!this._chart) return;
+    const text = resolveHAColor(this, "--secondary-text-color", "#757575");
+    for (const axis of ["x", "y", "y1"]) this._chart.options.scales[axis].ticks.color = text;
+    this._chart.options.scales.y.title.color = text;
+  }
+
+  _restyleToggles() {
+    const colors = seriesColors(this._hass);
+    for (const b of this.shadowRoot.querySelectorAll(".layer")) {
+      b.style.setProperty("--layer", colors[LAYERS[b.dataset.layer].series]);
+      b.style.setProperty("--layer-text", onSeriesFill(this._hass));
+    }
+  }
+
+  _applyData(s) {
+    if (!this._chart) return;
+    const datasets = [
+      { label: "Score", data: s.score, borderColor: seriesColors(this._hass).score, backgroundColor: (ctx) => createScoreGradient(ctx), fill: true, tension: 0.3, pointRadius: 0, yAxisID: "y", stepped: true },
+    ];
+    for (const key of this._active) {
+      datasets.push({
+        label: `${LAYERS[key].label}${s.units[key] ? ` (${s.units[key]})` : ""}`,
+        data: s[key],
+        borderColor: seriesColors(this._hass)[LAYERS[key].series],
+        borderDash: [6, 3],
+        fill: false,
+        tension: 0.3,
+        pointRadius: 0,
+        yAxisID: "y1",
+      });
+    }
+    this._chart.data.labels = s.times;
+    this._chart.data.datasets = datasets;
+    this._chart.options.scales.y1.display = this._active.size > 0;
+    this._chart.update(prefersReducedMotion() ? "none" : undefined);
+    const best = s.score.reduce((b, v, i) => (v != null && (b == null || v > s.score[b]) ? i : b), null);
+    this._status.textContent = best == null ? "" : `Best score ${s.score[best]} at ${formatHour(this._hass, s.times[best])}.`;
+  }
+
+  _renderTable(s) {
+    const keys = [...this._active];
+    const fmt = (key, v) => (v == null ? "—" : `${Math.round(v)}${s.units[key] && key !== "temp" ? ` ${s.units[key]}` : s.units[key]}`);
+    const headers = ["Time", "Score", ...keys.map((k) => LAYERS[k].label)];
+    const rows = s.times.map((t, i) => [formatHour(this._hass, t), s.score[i] == null ? "—" : String(s.score[i]), ...keys.map((k) => fmt(k, s[k][i]))]);
+    this._tableSlot.replaceChildren(dataTable("Paddle forecast, hourly", headers, rows));
   }
 }
 
-customElements.define("paddle-chart-card", PaddleChartCard);
+const STYLES = `
+  ${SR_ONLY_CSS}
+  :host { display: block; }
+  *, *::before, *::after { box-sizing: border-box; }
+  ha-card { display: flex; flex-direction: column; height: 100%; }
+  .title { margin: 0; padding: 16px 16px 8px; font-size: 16px; font-weight: 500; }
+  .layers { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 16px 8px; }
+  .layer { min-height: 32px; padding: 4px 12px; border-radius: 16px; border: 2px solid var(--layer); background: none; color: var(--primary-text-color); font: inherit; font-size: 13px; cursor: pointer; }
+  .layer[aria-pressed="true"] { background: var(--layer); color: var(--layer-text); }
+  .layer:focus-visible { outline: 2px solid var(--primary-color, #03a9f4); outline-offset: 2px; }
+  .chart { position: relative; flex: 1; min-height: 180px; padding: 0 12px 12px; }
+  .empty { margin: 0; padding: 8px 16px 16px; color: var(--secondary-text-color); }
+`;
 
+if (!customElements.get("paddle-chart-card")) customElements.define("paddle-chart-card", PaddleChartCard);
 export { PaddleChartCard };

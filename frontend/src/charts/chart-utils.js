@@ -28,7 +28,15 @@ export function formatTimestamp(ts, range) {
   return `${MONTH_NAMES[d.getMonth()]} ${d.getDate()}`;
 }
 
-export function computeStats(data) {
+/**
+ * Summary stats. dayKeyOf/weekdayOf let callers group by the user's chosen
+ * time zone; they default to the browser's.
+ */
+export function computeStats(
+  data,
+  dayKeyOf = (d) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`,
+  weekdayOf = (d) => d.getDay(),
+) {
   if (!data || data.length === 0) {
     return { avg: 0, best: 0, goDays: 0, bestDay: "--" };
   }
@@ -45,14 +53,14 @@ export function computeStats(data) {
     if (val > best) best = val;
 
     const d = new Date(point.timestamp);
-    const dateKey = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+    const dateKey = dayKeyOf(d);
 
     if (!dayScores.has(dateKey)) {
       dayScores.set(dateKey, []);
     }
     dayScores.get(dateKey).push(val);
 
-    const dow = d.getDay();
+    const dow = weekdayOf(d);
     dayOfWeekTotals[dow] += val;
     dayOfWeekCounts[dow] += 1;
   }

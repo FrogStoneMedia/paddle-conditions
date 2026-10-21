@@ -1,495 +1,252 @@
-import { colorForScore } from "../utils.js";
-import { CARD_STYLES } from "../styles/theme.js";
+// Paddle History card: long-term score statistics from the recorder.
+
 import { ensureChartReady, Chart } from "../charts/chart-loader.js";
-import {
-  computeStats,
-  getThresholdGridColor,
-  getZoneBackgrounds,
-  createScoreGradient,
-  resolveHAColor,
-} from "../charts/chart-utils.js";
+import { computeStats, getThresholdGridColor, resolveHAColor } from "../charts/chart-utils.js";
+import { PaddleLocation, scoreEntities, DOMAIN } from "../lib/entities.js";
+import { applyTheme, ratingForScore, ratingVar, seriesColors } from "../lib/theme.js";
+import { dayKey, formatDateTime, formatDay, weekday } from "../lib/time.js";
+import { el, button, prefersReducedMotion, SR_ONLY_CSS } from "../lib/dom.js";
+import { dataTable } from "../lib/table.js";
 
-const STYLES = `
-  ${CARD_STYLES}
-  .history-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 12px;
-  }
-  .history-title {
-    font-size: 1.1em;
-    font-weight: 600;
-  }
-  .range-chips {
-    display: flex;
-    gap: 4px;
-  }
-  .range-chip {
-    padding: 3px 10px;
-    border-radius: 12px;
-    font-size: 0.8em;
-    font-weight: 500;
-    cursor: pointer;
-    user-select: none;
-    border: 1px solid var(--divider-color, #ccc);
-    background: transparent;
-    color: var(--secondary-text-color, #757575);
-    transition: all 0.2s;
-  }
-  .range-chip.active {
-    border-color: #4CAF50;
-    background: rgba(76,175,80,0.18);
-    color: #2E7D32;
-  }
-  .chart-container {
-    position: relative;
-    width: 100%;
-    height: 180px;
-  }
-  .chart-container canvas {
-    width: 100% !important;
-    height: 100% !important;
-  }
-  .stats-bar {
-    display: flex;
-    gap: 8px;
-    justify-content: center;
-    flex-wrap: wrap;
-    margin-top: 12px;
-  }
-  .stat-chip {
-    background: var(--secondary-background-color, #f5f5f5);
-    border-radius: 8px;
-    padding: 8px 14px;
-    text-align: center;
-    min-width: 60px;
-  }
-  .stat-label {
-    font-size: 0.7em;
-    text-transform: uppercase;
-    color: var(--secondary-text-color, #757575);
-    letter-spacing: 0.5px;
-  }
-  .stat-value {
-    font-size: 1.3em;
-    font-weight: 600;
-    margin-top: 2px;
-  }
-  .chart-legend {
-    display: flex;
-    gap: 12px;
-    justify-content: center;
-    margin-top: 8px;
-    font-size: 0.8em;
-    color: var(--secondary-text-color, #757575);
-  }
-  .chart-skeleton {
-    width: 100%;
-    height: 100%;
-    background: var(--secondary-background-color, #f0f0f0);
-    border-radius: 8px;
-    animation: pulse 1.5s ease-in-out infinite;
-  }
-  @keyframes pulse {
-    0%, 100% { opacity: 0.6; }
-    50% { opacity: 0.3; }
-  }
-`;
-
-const RANGE_CONFIG = {
-  "7d": { days: 7, period: "hour", label: "7d" },
-  "30d": { days: 30, period: "day", label: "30d" },
-  "90d": { days: 90, period: "day", label: "90d" },
+const RANGES = {
+  "7d": { days: 7, period: "hour", label: "7 days" },
+  "30d": { days: 30, period: "day", label: "30 days" },
+  "90d": { days: 90, period: "day", label: "90 days" },
 };
-
 const CACHE_TTL_MS = 15 * 60 * 1000;
 
 class PaddleHistoryCard extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
-    this._config = {};
+    this._cache = new Map(); // "entity|range" -> { promise, fetchedAt, lastUpdated }
     this._chart = null;
-    this._range = "7d";
-    this._cache = new Map();
-    this._loading = false;
-    this._renderGen = 0;
+    this._gen = 0; // Bumped by every render and disconnect; stale async work checks it.
+  }
+
+  static getStubConfig(hass) {
+    return { entity: scoreEntities(hass)[0] || "" };
+  }
+
+  static getConfigForm() {
+    return {
+      schema: [
+        { name: "entity", required: true, selector: { entity: { filter: [{ integration: DOMAIN, domain: "sensor" }] } } },
+        { name: "name", selector: { text: {} } },
+        { name: "default_range", selector: { select: { mode: "dropdown", options: Object.entries(RANGES).map(([value, r]) => ({ value, label: r.label })) } } },
+        { name: "show_stats", selector: { boolean: {} } },
+      ],
+      computeLabel: (s) => ({ entity: "Paddle Score sensor", name: "Title", default_range: "Range", show_stats: "Show summary" })[s.name],
+    };
   }
 
   setConfig(config) {
-    if (!config.entity) {
-      throw new Error("Please define an entity");
-    }
+    if (!config?.entity) throw new Error("Choose a Paddle Score sensor");
     this._config = { show_stats: true, ...config };
-    this._range = config.default_range || "7d";
+    this._range = RANGES[config.default_range] ? config.default_range : "7d";
+    this._scoreId = null;
+    this._shown = null;
+    if (this._hass) this._sync();
   }
 
   set hass(hass) {
-    const entity = hass.states[this._config.entity];
-    const lastUpdated = entity ? entity.last_updated : null;
-    const newState = entity ? `${entity.state}|${lastUpdated}` : "";
-
-    const needsFetch = this._lastState !== newState;
-    this._lastState = newState;
     this._hass = hass;
-
-    if (needsFetch) {
-      this._invalidateCacheIfStale(lastUpdated);
-    }
-
-    this._render();
+    if (this._config) this._sync();
   }
 
   getCardSize() {
-    return 4;
+    return 5;
   }
 
-  static getStubConfig() {
-    return { entity: "", default_range: "7d" };
+  getGridOptions() {
+    return { columns: 12, min_columns: 6, rows: 5, min_rows: 4 };
   }
 
-  static getConfigElement() {
-    return document.createElement("paddle-history-editor");
+  disconnectedCallback() {
+    this._gen++;
+    clearTimeout(this._retry);
+    this._chart?.destroy();
+    this._chart = null;
+    this._shown = null; // Render again on reconnect: Chart.js needs an attached canvas.
   }
 
-  _invalidateCacheIfStale(lastUpdated) {
-    const cacheKey = `${this._config.entity}|${this._range}`;
-    const cached = this._cache.get(cacheKey);
-    if (cached) {
-      const staleByTime = Date.now() - cached.fetchedAt > CACHE_TTL_MS;
-      const staleByUpdate =
-        lastUpdated && cached.lastUpdated !== lastUpdated;
-      if (staleByTime || staleByUpdate) {
-        this._cache.delete(cacheKey);
-      }
+  connectedCallback() {
+    if (this._hass && this._config) this._sync();
+  }
+
+  /**
+   * Render when the score updates, the range or theme changes, or the cached
+   * result has expired. Rendering only while attached keeps Chart.js happy.
+   */
+  _sync() {
+    if (!this.isConnected) return;
+    if (!this._scoreId || this._hass.entities !== this._entitiesRef) {
+      this._entitiesRef = this._hass.entities;
+      this._scoreId = new PaddleLocation(this._hass, this._config.entity).id("paddle_score") || this._config.entity;
     }
+    const state = this._hass.states[this._scoreId];
+    const bucket = Math.floor(Date.now() / CACHE_TTL_MS);
+    const key = `${this._scoreId}|${this._range}|${state?.last_updated}|${Boolean(this._hass.themes?.darkMode)}|${bucket}`;
+    if (key === this._shown) return;
+    this._shown = key;
+    this._render(state);
   }
 
-  async _fetchHistory() {
-    const cacheKey = `${this._config.entity}|${this._range}`;
-    const cached = this._cache.get(cacheKey);
-    if (cached) return cached.data;
+  _fetch(scoreId, rangeKey, lastUpdated) {
+    const key = `${scoreId}|${rangeKey}`;
+    const hit = this._cache.get(key);
+    if (hit && Date.now() - hit.fetchedAt < CACHE_TTL_MS && hit.lastUpdated === lastUpdated) return hit.promise;
+    const range = RANGES[rangeKey];
+    const end = new Date();
+    const promise = this._hass
+      .callWS({
+        type: "recorder/statistics_during_period",
+        statistic_ids: [scoreId],
+        period: range.period,
+        start_time: new Date(end.getTime() - range.days * 86400000).toISOString(),
+        end_time: end.toISOString(),
+        types: ["mean"],
+      })
+      .then((result) =>
+        (result[scoreId] || [])
+          .filter((s) => s.mean != null)
+          .map((s) => ({ timestamp: new Date(s.start).toISOString(), value: Math.round(s.mean) })),
+      )
+      .catch((err) => {
+        this._cache.delete(key);
+        throw err;
+      });
+    this._cache.set(key, { promise, fetchedAt: Date.now(), lastUpdated });
+    return promise;
+  }
 
-    if (this._loading) return "loading";
-    this._loading = true;
+  async _render(state) {
+    const gen = ++this._gen;
+    clearTimeout(this._retry);
+    applyTheme(this, this._hass);
+    const hass = this._hass;
+    const scoreId = this._scoreId;
+    const rangeKey = this._range;
+    const range = RANGES[rangeKey];
+    const status = el("p", { className: "status", role: "status", "aria-live": "polite", text: state ? `Loading ${range.label} of history\u2026` : "" });
+    const chartBox = el("div", { className: "chart" }, el("div", { className: "skeleton", "aria-hidden": "true" }));
+    const tableSlot = el("div");
+    const stats = el("div");
+    const ranges = el(
+      "div",
+      { className: "ranges", role: "group", "aria-label": "History range" },
+      Object.entries(RANGES).map(([key, r]) =>
+        button(
+          {
+            className: "range",
+            "data-range": key,
+            "aria-pressed": String(key === rangeKey),
+            onClick: () => {
+              this._range = key;
+              this._sync();
+              this.shadowRoot.querySelector(`.range[data-range="${key}"]`)?.focus();
+            },
+          },
+          r.label,
+        ),
+      ),
+    );
+    const header = el("div", { className: "head" }, [el("h2", { className: "title", text: this._config.name || "Score history" }), ranges]);
+    this._chart?.destroy();
+    this._chart = null;
 
-    const rangeCfg = RANGE_CONFIG[this._range];
-    const now = new Date();
-    const startTime = new Date(
-      now.getTime() - rangeCfg.days * 24 * 60 * 60 * 1000
+    if (!state) {
+      status.textContent = `Sensor not found: ${this._config.entity}`;
+      this.shadowRoot.replaceChildren(el("style", { text: STYLES }), el("ha-card", {}, [header, status]));
+      return;
+    }
+    this.shadowRoot.replaceChildren(el("style", { text: STYLES }), el("ha-card", {}, [header, chartBox, stats, status, tableSlot]));
+
+    let data;
+    try {
+      data = await this._fetch(scoreId, rangeKey, state.last_updated);
+    } catch {
+      if (gen !== this._gen) return;
+      chartBox.replaceChildren();
+      status.textContent = "Could not load history. Retrying in a minute; check that the recorder is enabled.";
+      this._retry = setTimeout(() => {
+        this._shown = null;
+        if (this._hass) this._sync();
+      }, 60000);
+      return;
+    }
+    if (gen !== this._gen || !this.isConnected) return; // A newer render owns the card.
+
+    chartBox.replaceChildren();
+    if (!data.length) {
+      status.textContent = `No history for the last ${range.label} yet.`;
+      return;
+    }
+    const s = computeStats(data, (d) => dayKey(hass, d), (d) => weekday(hass, d));
+    status.textContent = `${range.label}: average ${s.avg}, best ${s.best}, ${s.goDays} Go days.`;
+    if (this._config.show_stats) stats.replaceChildren(this._stats(s));
+    const label = range.period === "hour" ? (d) => formatDateTime(hass, d) : (d) => formatDay(hass, d);
+    tableSlot.replaceChildren(
+      dataTable(`Paddle score, ${range.label}`, ["Time", "Score"], data.map((d) => [label(new Date(d.timestamp)), String(d.value)])),
     );
 
-    try {
-      const result = await this._hass.callWS({
-        type: "recorder/statistics_during_period",
-        statistic_ids: [this._config.entity],
-        period: rangeCfg.period,
-        start_time: startTime.toISOString(),
-        end_time: now.toISOString(),
-        types: ["mean"],
-      });
-
-      const entityStats = result[this._config.entity] || [];
-      // Response timestamps are ms since epoch; mean only for MEASUREMENT sensors
-      const data = entityStats
-        .map((s) => ({
-          timestamp: new Date(s.start).toISOString(),
-          value: s.mean != null ? Math.round(s.mean) : null,
-        }))
-        .filter((d) => d.value != null);
-
-      const entity = this._hass.states[this._config.entity];
-      this._cache.set(cacheKey, {
-        data,
-        lastUpdated: entity ? entity.last_updated : null,
-        fetchedAt: Date.now(),
-      });
-
-      return data;
-    } catch (err) {
-      console.warn("paddle-history-card: Failed to fetch history", err);
-      return null;
-    } finally {
-      this._loading = false;
-    }
-  }
-
-  _setRange(range) {
-    this._range = range;
-    this._render();
-  }
-
-  async _render() {
-    const gen = ++this._renderGen;
-
-    try {
-      const entity = this._hass.states[this._config.entity];
-      const root = this.shadowRoot;
-
-      if (this._chart) {
-        this._chart.destroy();
-        this._chart = null;
-      }
-      root.textContent = "";
-
-      const style = document.createElement("style");
-      style.textContent = STYLES;
-
-      const card = document.createElement("ha-card");
-
-      if (!entity) {
-        const empty = document.createElement("div");
-        empty.className = "empty-state";
-        empty.textContent = `Entity not found: ${this._config.entity}`;
-        card.appendChild(empty);
-        root.append(style, card);
-        return;
-      }
-
-      // Header with range chips
-      const header = document.createElement("div");
-      header.className = "history-header";
-      const title = document.createElement("div");
-      title.className = "history-title";
-      title.textContent = this._config.name || "Score History";
-      header.appendChild(title);
-
-      const rangeChips = document.createElement("div");
-      rangeChips.className = "range-chips";
-      rangeChips.setAttribute("role", "group");
-      rangeChips.setAttribute("aria-label", "Time range");
-      for (const [key, cfg] of Object.entries(RANGE_CONFIG)) {
-        const isActive = this._range === key;
-        const chip = document.createElement("span");
-        chip.className = `range-chip ${isActive ? "active" : ""}`;
-        chip.textContent = cfg.label;
-        chip.setAttribute("role", "button");
-        chip.setAttribute("tabindex", "0");
-        chip.setAttribute("aria-pressed", String(isActive));
-        chip.setAttribute("aria-label", `Show ${cfg.days} day history`);
-        chip.addEventListener("click", () => this._setRange(key));
-        chip.addEventListener("keydown", (e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            this._setRange(key);
-          }
-        });
-        rangeChips.appendChild(chip);
-      }
-      header.appendChild(rangeChips);
-      card.appendChild(header);
-
-      // Chart container with skeleton placeholder
-      const container = document.createElement("div");
-      container.className = "chart-container";
-      container.setAttribute("role", "img");
-      container.setAttribute("aria-label", `Score history over ${RANGE_CONFIG[this._range].days} days`);
-      const skeleton = document.createElement("div");
-      skeleton.className = "chart-skeleton";
-      container.appendChild(skeleton);
-      card.appendChild(container);
-
-      // Axis legend
-      const legend = document.createElement("div");
-      legend.className = "chart-legend";
-      const label = document.createElement("span");
-      label.textContent = "Score (0-100)";
-      legend.appendChild(label);
-      card.appendChild(legend);
-
-      root.append(style, card);
-
-      // Fetch data
-      const data = await this._fetchHistory();
-
-      // Stale render check
-      if (gen !== this._renderGen) return;
-
-      // Keep skeleton visible while loading
-      if (data === "loading") return;
-
-      // Replace skeleton
-      container.textContent = "";
-
-      if (!data || data.length === 0) {
-        const empty = document.createElement("div");
-        empty.className = "empty-state";
-        empty.textContent =
-          data === null
-            ? "Could not load history"
-            : "No history data available";
-        container.appendChild(empty);
-
-        if (this._config.show_stats) {
-          this._renderStats(card, {
-            avg: 0,
-            best: 0,
-            goDays: 0,
-            bestDay: "--",
-          });
-        }
-        return;
-      }
-
-      const canvas = document.createElement("canvas");
-      container.appendChild(canvas);
-
-      ensureChartReady();
-      this._buildChart(canvas, data);
-
-      if (this._config.show_stats) {
-        const stats = computeStats(data);
-        this._renderStats(card, stats);
-      }
-    } catch (err) {
-      console.warn("paddle-history-card: Render error", err);
-    }
-  }
-
-  _renderStats(card, stats) {
-    const bar = document.createElement("div");
-    bar.className = "stats-bar";
-
-    const items = [
-      {
-        label: "Avg",
-        value: String(stats.avg),
-        color: colorForScore(stats.avg),
-      },
-      {
-        label: "Best",
-        value: String(stats.best),
-        color: colorForScore(stats.best),
-      },
-      { label: "Go Days", value: String(stats.goDays), color: null },
-      { label: "Best Day", value: stats.bestDay, color: null },
-    ];
-
-    for (const item of items) {
-      const chip = document.createElement("div");
-      chip.className = "stat-chip";
-
-      const labelEl = document.createElement("div");
-      labelEl.className = "stat-label";
-      labelEl.textContent = item.label;
-      chip.appendChild(labelEl);
-
-      const valueEl = document.createElement("div");
-      valueEl.className = "stat-value";
-      valueEl.textContent = item.value;
-      if (item.color) valueEl.style.color = item.color;
-      chip.appendChild(valueEl);
-
-      bar.appendChild(chip);
-    }
-
-    card.appendChild(bar);
-  }
-
-  _buildChart(canvas, data) {
-    const labels = data.map((d) => d.timestamp);
-    const values = data.map((d) => d.value);
-
-    const rangeCfg = RANGE_CONFIG[this._range];
-    const timeUnit = rangeCfg.period === "hour" ? "hour" : "day";
-
-    const zonePlugin = {
-      id: "scoreZones",
-      beforeDraw: (chart) => {
-        const { ctx, chartArea, scales } = chart;
-        if (!chartArea) return;
-        const zones = getZoneBackgrounds();
-        for (const zone of zones) {
-          const yTop = scales.y.getPixelForValue(zone.to);
-          const yBottom = scales.y.getPixelForValue(zone.from);
-          ctx.save();
-          ctx.fillStyle = zone.color;
-          ctx.fillRect(
-            chartArea.left,
-            yTop,
-            chartArea.width,
-            yBottom - yTop
-          );
-          ctx.restore();
-        }
-      },
-    };
-
+    const canvas = el("canvas", { "aria-hidden": "true" });
+    chartBox.append(canvas);
+    ensureChartReady();
+    const text = resolveHAColor(this, "--secondary-text-color", "#757575");
+    const color = seriesColors(hass).score;
     this._chart = new Chart(canvas, {
       type: "line",
       data: {
-        labels,
-        datasets: [
-          {
-            label: "Score",
-            data: values,
-            borderColor: "#4CAF50",
-            backgroundColor: (ctx) => createScoreGradient(ctx),
-            fill: true,
-            tension: 0.3,
-            pointRadius: rangeCfg.days <= 7 ? 2 : 0,
-            pointHoverRadius: 4,
-          },
-        ],
+        labels: data.map((d) => d.timestamp),
+        datasets: [{ label: "Score", data: data.map((d) => d.value), borderColor: color, backgroundColor: "rgba(67,160,71,.12)", fill: true, tension: 0.3, pointRadius: 0 }],
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        interaction: {
-          mode: "index",
-          intersect: false,
-        },
-        plugins: {
-          legend: { display: false },
-          tooltip: {
-            callbacks: {
-              label: (item) => `Score: ${item.raw}%`,
-            },
-          },
-        },
+        animation: prefersReducedMotion() ? false : { duration: 300 },
+        plugins: { legend: { display: false }, tooltip: { callbacks: { title: (items) => formatDateTime(hass, new Date(items[0].parsed.x)) } } },
         scales: {
-          x: {
-            type: "time",
-            time: { unit: timeUnit },
-            grid: { display: false },
-            ticks: {
-              color: resolveHAColor(
-                this,
-                "--secondary-text-color",
-                "#757575"
-              ),
-              maxTicksLimit: 8,
-            },
-          },
-          y: {
-            min: 0,
-            max: 100,
-            grid: {
-              color: (ctx) => getThresholdGridColor(ctx.tick.value),
-            },
-            ticks: {
-              color: resolveHAColor(
-                this,
-                "--secondary-text-color",
-                "#757575"
-              ),
-            },
-          },
+          x: { type: "time", time: { unit: range.period === "hour" ? "day" : "week" }, grid: { display: false }, ticks: { color: text, maxTicksLimit: 7, callback: (v) => formatDay(hass, new Date(v)) } },
+          y: { min: 0, max: 100, grid: { color: (ctx) => getThresholdGridColor(ctx.tick.value) }, ticks: { color: text } },
         },
       },
-      plugins: [zonePlugin],
     });
   }
 
-  disconnectedCallback() {
-    if (this._chart) {
-      this._chart.destroy();
-      this._chart = null;
-    }
+  _stats(s) {
+    const item = (label, value, color) => el("div", { className: "stat" }, [el("dt", { text: label }), el("dd", { style: color ? { color } : null, text: value })]);
+    return el("dl", { className: "stats" }, [
+      item("Average", String(s.avg), ratingVar(ratingForScore(s.avg))),
+      item("Best", String(s.best), ratingVar(ratingForScore(s.best))),
+      item("Go days", String(s.goDays)),
+      item("Best weekday", s.bestDay),
+    ]);
   }
 }
 
-customElements.define("paddle-history-card", PaddleHistoryCard);
+const STYLES = `
+  ${SR_ONLY_CSS}
+  :host { display: block; }
+  *, *::before, *::after { box-sizing: border-box; }
+  ha-card { display: flex; flex-direction: column; height: 100%; }
+  .head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; padding: 16px 16px 8px; }
+  .title { margin: 0; font-size: 16px; font-weight: 500; }
+  .ranges { display: flex; gap: 6px; }
+  .range { min-height: 32px; padding: 4px 12px; border-radius: 16px; border: 1px solid var(--divider-color); background: none; color: var(--primary-text-color); font: inherit; font-size: 13px; cursor: pointer; }
+  /* Selected: heavier border and weight in the text colour, so it doesn't depend on the theme's primary colour for contrast. */
+  .range[aria-pressed="true"] { border: 2px solid var(--primary-color); font-weight: 700; }
+  .range:focus-visible { outline: 2px solid var(--primary-color, #03a9f4); outline-offset: 2px; }
+  .chart { position: relative; flex: 1; min-height: 160px; padding: 0 12px; }
+  .skeleton { height: 160px; border-radius: 8px; background: var(--secondary-background-color, rgba(127,127,127,.15)); animation: pulse 1.5s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .5; } }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 8px 12px 0; }
+  .stat { text-align: center; }
+  .stat dt { font-size: 12px; color: var(--secondary-text-color); }
+  .stat dd { margin: 0; font-size: 18px; font-weight: 700; }
+  .status { margin: 8px 16px 16px; font-size: 13px; color: var(--secondary-text-color); }
+  @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
+`;
 
+if (!customElements.get("paddle-history-card")) customElements.define("paddle-history-card", PaddleHistoryCard);
 export { PaddleHistoryCard };

@@ -1,71 +1,41 @@
-// Paddle Conditions - Custom Lovelace Cards
-// Bundled dashboard cards for Home Assistant integration
+// Paddle Conditions dashboard cards, bundled into one module.
 
 import "./cards/paddle-score-card.js";
+import "./cards/paddle-spots-card.js";
 import "./cards/paddle-factors-card.js";
-import "./cards/paddle-chips-card.js";
 import "./cards/paddle-forecast-card.js";
-import "./cards/paddle-fitness-card.js";
 import "./cards/paddle-chart-card.js";
 import "./cards/paddle-history-card.js";
+import { isScoreEntity } from "./lib/entities.js";
 
-import "./editors/paddle-score-editor.js";
-import "./editors/paddle-factors-editor.js";
-import "./editors/paddle-chips-editor.js";
-import "./editors/paddle-forecast-editor.js";
-import "./editors/paddle-fitness-editor.js";
-import "./editors/paddle-chart-editor.js";
-import "./editors/paddle-history-editor.js";
+const DOCS = "https://github.com/FrogStoneMedia/paddle-conditions#dashboard";
+// [type, name, description, suggest for a picked Paddle Score sensor]
+const CARDS = [
+  ["paddle-score-card", "Paddle Score", "Go / Caution / No-go hero, factor breakdown, forecast strip and hourly details", true],
+  ["paddle-spots-card", "Paddle Spots", "Every paddle spot's score and rating at a glance", false],
+  ["paddle-factors-card", "Paddle Factors", "Each scoring factor with its reading and sub-score", true],
+  ["paddle-forecast-card", "Paddle Forecast", "The next 24 hours in 3-hour blocks, with the best window", true],
+  ["paddle-chart-card", "Paddle Chart", "Score over the next 24 hours with wind, temperature, UV and rain layers", true],
+  ["paddle-history-card", "Paddle History", "Score history and summary from the recorder", true],
+];
 
-// Register cards with HA's card picker
-window.customCards = window.customCards || [];
-window.customCards.push(
-  {
-    type: "paddle-score-card",
-    name: "Paddle Score",
-    description: "Paddle conditions score with Go/Caution/No-go rating",
+/** Entries for window.customCards, including "By entity" suggestions in the card picker. */
+export function customCardEntries() {
+  return CARDS.map(([type, name, description, suggest]) => ({
+    type,
+    name,
+    description,
     preview: true,
-  },
-  {
-    type: "paddle-factors-card",
-    name: "Paddle Factors",
-    description: "Factor breakdown showing individual scoring components",
-    preview: true,
-  },
-  {
-    type: "paddle-chips-card",
-    name: "Paddle Chips",
-    description: "Location navigation chips with quick scores",
-    preview: true,
-  },
-  {
-    type: "paddle-forecast-card",
-    name: "Paddle Forecast",
-    description: "3-hour forecast blocks with best window highlight",
-    preview: true,
-  },
-  {
-    type: "paddle-fitness-card",
-    name: "Paddle Fitness",
-    description: "Session tracking placeholder (coming soon)",
-    preview: false,
-  },
-  {
-    type: "paddle-chart-card",
-    name: "Paddle Chart",
-    description: "Multi-metric forecast chart with toggleable overlays",
-    preview: true,
-  },
-  {
-    type: "paddle-history-card",
-    name: "Paddle History",
-    description: "Score trend over time with summary statistics",
-    preview: true,
+    documentationURL: DOCS,
+    ...(suggest && {
+      getEntitySuggestion: (hass, entityId) => (isScoreEntity(hass, entityId) ? { config: { type: `custom:${type}`, entity: entityId } } : null),
+    }),
+  }));
+}
+
+if (typeof window !== "undefined") {
+  window.customCards = window.customCards || [];
+  for (const entry of customCardEntries()) {
+    if (!window.customCards.some((c) => c.type === entry.type)) window.customCards.push(entry);
   }
-);
-
-console.info(
-  "%c PADDLE CONDITIONS %c Cards loaded ",
-  "background: #4CAF50; color: white; font-weight: bold; padding: 2px 6px; border-radius: 4px 0 0 4px;",
-  "background: #eee; color: #333; padding: 2px 6px; border-radius: 0 4px 4px 0;"
-);
+}
