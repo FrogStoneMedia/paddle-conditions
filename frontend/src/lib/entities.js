@@ -20,6 +20,9 @@ const DEFAULT_SUFFIX = {
   visibility: "visibility",
   precipitation: "precipitation_chance",
   streamflow: "streamflow",
+  river_stage: "river_stage",
+  reservoir_level: "reservoir_level",
+  dam_outflow: "dam_outflow",
   condition: "conditions",
   forecast_3hr: "3_hour_forecast",
 };

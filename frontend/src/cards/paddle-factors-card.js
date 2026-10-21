@@ -14,6 +14,10 @@ const FACTORS = [
   { key: "visibility", label: "Visibility", sensor: "visibility", icon: "mdi:eye-outline" },
   { key: "precipitation", label: "Rain chance", sensor: "precipitation", icon: "mdi:weather-rainy" },
   { key: "streamflow", label: "Streamflow", sensor: "streamflow", icon: "mdi:waves" },
+  { key: "river_stage", label: "River stage", sensor: "river_stage", icon: "mdi:waves-arrow-up" },
+  { key: "reservoir_level", label: "Reservoir level", sensor: "reservoir_level", icon: "mdi:water-percent" },
+  // Scored from up to four readings, so there is no single sensor to show.
+  { key: "water_quality", label: "Water quality", sensor: null, icon: "mdi:water-check" },
 ];
 
 class PaddleFactorsCard extends HTMLElement {
@@ -77,8 +81,8 @@ class PaddleFactorsCard extends HTMLElement {
       for (const f of FACTORS) {
         const sub = factors[f.key];
         if (sub == null) continue;
-        const sensorId = this._location.id(f.sensor);
-        const value = formatState(this._hass, this._location.state(f.sensor));
+        const sensorId = f.sensor && this._location.id(f.sensor);
+        const value = f.sensor ? formatState(this._hass, this._location.state(f.sensor)) : "";
         const color = ratingVar(ratingForScore(sub));
         list.append(
           el(
@@ -87,7 +91,7 @@ class PaddleFactorsCard extends HTMLElement {
             button(
               {
                 className: "factor",
-                "aria-label": `${f.label}: ${value}, score ${sub} out of 100. Show details.`,
+                "aria-label": `${f.label}: ${value ? `${value}, ` : ""}score ${sub} out of 100.${sensorId ? " Show details." : ""}`,
                 onClick: () => sensorId && this.dispatchEvent(new CustomEvent("hass-more-info", { bubbles: true, composed: true, detail: { entityId: sensorId } })),
               },
               [
