@@ -62,8 +62,14 @@ async def test_fetch_tides_http_error(mock_session):
         await client.fetch_tides(station_id="9414290")
 
 
+def _recent(minutes_ago: int = 6) -> str:
+    from datetime import UTC, datetime, timedelta
+
+    return (datetime.now(UTC) - timedelta(minutes=minutes_ago)).strftime("%Y-%m-%d %H:%M")
+
+
 async def test_fetch_water_temp_success(mock_session):
-    water_temp_response = {"data": [{"t": "2026-03-10 12:00", "v": "55.2"}]}
+    water_temp_response = {"data": [{"t": _recent(), "v": "55.2"}]}
     mock_session.get = mock_get_json(water_temp_response)
 
     client = NOAAClient(mock_session)
@@ -78,3 +84,16 @@ async def test_fetch_water_temp_no_data(mock_session):
     client = NOAAClient(mock_session)
     temp = await client.fetch_water_temp(station_id="9414290")
     assert temp is None
+
+
+async def test_fetch_water_temp_ignores_old_observation(mock_session):
+    """date=latest returns the last reading however old; a dead sensor must not look current."""
+    mock_session.get = mock_get_json({"data": [{"t": _recent(minutes_ago=7 * 60), "v": "55.2"}]})
+
+    assert await NOAAClient(mock_session).fetch_water_temp(station_id="9414290") is None
+
+
+async def test_fetch_water_temp_unparseable_time(mock_session):
+    mock_session.get = mock_get_json({"data": [{"t": "yesterday", "v": "55.2"}]})
+
+    assert await NOAAClient(mock_session).fetch_water_temp(station_id="9414290") is None

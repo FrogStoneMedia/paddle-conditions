@@ -16,6 +16,7 @@ CONF_LONGITUDE = "longitude"
 CONF_WATER_BODY_TYPE = "water_body_type"
 CONF_DISPLAY_ORDER = "display_order"
 CONF_USGS_STATION_ID = "usgs_station_id"
+CONF_USGS_API_KEY = "usgs_api_key"
 CONF_NOAA_STATION_ID = "noaa_station_id"
 
 # Water body types
@@ -58,10 +59,3 @@ DEFAULT_PROFILES = {
     ACTIVITY_SUP: PROFILE_RECREATIONAL,
     ACTIVITY_KAYAKING: PROFILE_FLATWATER,
 }
-
-# Cloud sync
-CONF_CLOUD_SYNC_ENABLED = "cloud_sync_enabled"
-CONF_CLOUD_SYNC_URL = "cloud_sync_url"
-CONF_CLOUD_SYNC_TOKEN = "cloud_sync_token"
-CONF_CLOUD_SYNC_INTERVAL = "cloud_sync_interval"
-DEFAULT_CLOUD_SYNC_INTERVAL_MINUTES = 5

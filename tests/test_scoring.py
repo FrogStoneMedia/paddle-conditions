@@ -90,13 +90,15 @@ def test_paddle_conditions_creation():
         precipitation_probability=10,
         streamflow_cfs=None,
         tide_factor=None,
-        condition_text="Partly cloudy",
+        condition="partly_cloudy",
         forecast_blocks=[],
         hourly_times=[],
         hourly_wind=[],
         hourly_temp=[],
         hourly_uv=[],
         hourly_precip=[],
+        hourly_gusts=[],
+        fetched_at="2026-10-21T19:00:00+00:00",
     )
     assert conditions.wind_speed == 8.0
     assert conditions.water_temp == 68.0
@@ -111,6 +113,7 @@ def test_forecast_block_creation():
         score=72,
         rating="GO",
         wind_mph=8.0,
+        gust_mph=None,
         temp_f=78.0,
         uv=5.2,
         precip_pct=0,
@@ -135,6 +138,7 @@ def test_paddle_conditions_with_forecast():
         score=72,
         rating="GO",
         wind_mph=8.0,
+        gust_mph=None,
         temp_f=78.0,
         uv=5.2,
         precip_pct=0,
@@ -154,13 +158,15 @@ def test_paddle_conditions_with_forecast():
         precipitation_probability=10,
         streamflow_cfs=None,
         tide_factor=None,
-        condition_text=None,
+        condition=None,
         forecast_blocks=[block],
         hourly_times=[],
         hourly_wind=[],
         hourly_temp=[],
         hourly_uv=[],
         hourly_precip=[],
+        hourly_gusts=[],
+        fetched_at="2026-10-21T19:00:00+00:00",
     )
     assert len(conditions.forecast_blocks) == 1
     assert conditions.forecast_blocks[0].score == 72
@@ -800,3 +806,32 @@ def test_compute_score_missing_weight_key_no_crash():
     # Should compute score from just wind_speed and temperature
     assert score.rating in ("GO", "CAUTION", "NO_GO")
     assert score.value >= 0
+
+
+def test_zero_weight_factor_is_never_limiting_or_missing():
+    """Matches the Paddle Conditions API: a factor weighted 0 can't limit the score or count as missing."""
+    from custom_components.paddle_conditions.scoring import compute_paddle_score
+
+    weights = {
+        "wind_speed": 0.5,
+        "wind_gusts": 0.0,
+        "air_quality": 0.5,
+        "temperature": 0.0,
+        "uv_index": 0.0,
+        "visibility": 0.0,
+        "precipitation": 0.0,
+    }
+    score = compute_paddle_score(
+        wind_speed=2.0,
+        wind_gusts=None,
+        aqi=20,
+        air_temp=75.0,
+        uv_index=11.0,  # Terrible UV, but weighted 0.
+        visibility=None,
+        precipitation=None,
+        has_thunderstorm=False,
+        weights=weights,
+    )
+
+    assert score.limiting_factor in {"wind_speed", "air_quality"}
+    assert score.missing_factors == []

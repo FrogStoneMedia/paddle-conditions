@@ -17,7 +17,8 @@
         "user": "Add paddle location"
       },
       "error": {
-        "cannot_connect": "Could not connect to weather service. Check coordinates and try again."
+        "cannot_connect": "Could not connect to weather service. Check coordinates and try again.",
+        "unknown": "Unexpected error. Check the Home Assistant log for details."
       },
       "step": {
         "user": {
@@ -97,32 +98,141 @@
           "weight_uv_index": "UV index weight",
           "weight_visibility": "Visibility weight",
           "weight_precipitation": "Precipitation weight",
-          "cloud_sync_url": "Cloud sync URL (optional)",
-          "cloud_sync_token": "Cloud sync token (optional)"
+          "usgs_api_key": "USGS API key (optional)"
         },
         "data_description": {
           "activity": "Switch between paddle boarding and kayaking. Each has its own scoring profiles",
           "profile": "Preset weight configurations tuned for different paddling styles",
-          "update_interval": "How often to refresh weather and condition data from APIs"
+          "update_interval": "How often to refresh weather and condition data from APIs",
+          "usgs_api_key": "A free key from api.waterdata.usgs.gov lets river locations refresh flow and water temperature every 15 minutes instead of hourly."
         }
       }
     }
   },
   "entity": {
     "sensor": {
-      "paddle_score": {"name": "Paddle Score"},
-      "wind_speed": {"name": "Wind Speed"},
-      "wind_gusts": {"name": "Wind Gusts"},
-      "wind_direction": {"name": "Wind Direction"},
-      "air_temp": {"name": "Air Temperature"},
-      "water_temp": {"name": "Water Temperature"},
-      "uv_index": {"name": "UV Index"},
-      "aqi": {"name": "Air Quality Index"},
-      "visibility": {"name": "Visibility"},
-      "precipitation": {"name": "Precipitation Chance"},
-      "condition": {"name": "Conditions"},
-      "streamflow": {"name": "Streamflow"},
-      "forecast_3hr": {"name": "3-Hour Forecast"}
+      "paddle_score": {
+        "name": "Paddle Score"
+      },
+      "rating": {
+        "name": "Rating",
+        "state": {
+          "go": "Go",
+          "caution": "Caution",
+          "no_go": "No-go"
+        }
+      },
+      "wind_speed": {
+        "name": "Wind Speed"
+      },
+      "wind_gusts": {
+        "name": "Wind Gusts"
+      },
+      "wind_direction": {
+        "name": "Wind Direction"
+      },
+      "air_temp": {
+        "name": "Air Temperature"
+      },
+      "water_temp": {
+        "name": "Water Temperature"
+      },
+      "uv_index": {
+        "name": "UV Index"
+      },
+      "aqi": {
+        "name": "Air Quality Index"
+      },
+      "visibility": {
+        "name": "Visibility"
+      },
+      "precipitation": {
+        "name": "Precipitation Chance"
+      },
+      "condition": {
+        "name": "Conditions",
+        "state": {
+          "clear_sky": "Clear sky",
+          "mainly_clear": "Mainly clear",
+          "partly_cloudy": "Partly cloudy",
+          "overcast": "Overcast",
+          "fog": "Fog",
+          "depositing_rime_fog": "Freezing fog",
+          "light_drizzle": "Light drizzle",
+          "moderate_drizzle": "Moderate drizzle",
+          "dense_drizzle": "Dense drizzle",
+          "light_freezing_drizzle": "Light freezing drizzle",
+          "dense_freezing_drizzle": "Dense freezing drizzle",
+          "slight_rain": "Light rain",
+          "moderate_rain": "Moderate rain",
+          "heavy_rain": "Heavy rain",
+          "light_freezing_rain": "Light freezing rain",
+          "heavy_freezing_rain": "Heavy freezing rain",
+          "slight_snow": "Light snow",
+          "moderate_snow": "Moderate snow",
+          "heavy_snow": "Heavy snow",
+          "snow_grains": "Snow grains",
+          "slight_rain_showers": "Light rain showers",
+          "moderate_rain_showers": "Moderate rain showers",
+          "violent_rain_showers": "Violent rain showers",
+          "slight_snow_showers": "Light snow showers",
+          "heavy_snow_showers": "Heavy snow showers",
+          "thunderstorm": "Thunderstorm",
+          "thunderstorm_with_slight_hail": "Thunderstorm with light hail",
+          "thunderstorm_with_heavy_hail": "Thunderstorm with heavy hail"
+        }
+      },
+      "streamflow": {
+        "name": "Streamflow"
+      },
+      "forecast_3hr": {
+        "name": "3-Hour Forecast"
+      }
+    }
+  },
+  "exceptions": {
+    "weather_unavailable": {
+      "message": "Weather data for {location} is unavailable: {error}"
+    },
+    "no_locations": {
+      "message": "Add a paddle location before generating a dashboard."
+    }
+  },
+  "services": {
+    "get_dashboard_yaml": {
+      "name": "Get dashboard YAML",
+      "description": "Returns a complete dashboard configuration for your paddle locations, in display order. Copy the response into a new dashboard's raw configuration editor."
+    }
+  },
+  "issues": {
+    "usgs_rate_limited": {
+      "title": "USGS is rate limiting river data",
+      "description": "The USGS Water Data API is limiting requests from your network, so streamflow and water temperature may be missing or late. Get a free API key from the USGS sign-up page, then add it under Paddle Conditions > Configure > USGS API key."
+    }
+  },
+  "selector": {
+    "water_body_type": {
+      "options": {
+        "lake": "Lake or reservoir",
+        "river": "River",
+        "bay_ocean": "Bay or ocean"
+      }
+    },
+    "activity": {
+      "options": {
+        "sup": "Paddle boarding",
+        "kayaking": "Kayaking"
+      }
+    },
+    "profile": {
+      "options": {
+        "recreational": "Recreational",
+        "racing": "Racing",
+        "family": "Family",
+        "flatwater": "Flatwater",
+        "river": "River",
+        "ocean": "Ocean"
+      }
     }
   }
 }

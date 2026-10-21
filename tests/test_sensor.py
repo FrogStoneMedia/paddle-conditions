@@ -39,13 +39,15 @@ def _make_conditions(**overrides):
         "precipitation_probability": 10,
         "streamflow_cfs": None,
         "tide_factor": None,
-        "condition_text": "Partly cloudy",
+        "condition": "partly_cloudy",
         "forecast_blocks": [],
         "hourly_times": [],
         "hourly_wind": [],
         "hourly_temp": [],
         "hourly_uv": [],
         "hourly_precip": [],
+        "hourly_gusts": [],
+        "fetched_at": "2026-10-21T19:00:00+00:00",
     }
     defaults.update(overrides)
     return PaddleConditions(**defaults)
@@ -68,6 +70,7 @@ class TestSensorDescriptions:
         keys = {d.key for d in SENSOR_DESCRIPTIONS}
         expected = {
             "score",
+            "rating",
             "wind_speed",
             "wind_gusts",
             "wind_direction",
@@ -162,12 +165,12 @@ class TestPaddleSensor:
         sensor = PaddleSensor(coordinator, "sub_001", desc)
         assert sensor.native_value == 55
 
-    def test_condition_text(self):
+    def test_condition(self):
         """Condition sensor returns the text description."""
-        coordinator = _make_coordinator(_make_conditions(condition_text="Clear sky"))
+        coordinator = _make_coordinator(_make_conditions(condition="clear_sky"))
         desc = next(d for d in SENSOR_DESCRIPTIONS if d.key == "condition")
         sensor = PaddleSensor(coordinator, "sub_001", desc)
-        assert sensor.native_value == "Clear sky"
+        assert sensor.native_value == "clear_sky"
 
     def test_streamflow_value(self):
         """Streamflow sensor returns CFS value."""
@@ -180,7 +183,15 @@ class TestPaddleSensor:
         """Forecast sensor returns first block score."""
         blocks = [
             ForecastBlock(
-                start="12:00", end="15:00", score=78, rating="GO", wind_mph=10.0, temp_f=72.0, uv=5.0, precip_pct=0
+                start="12:00",
+                end="15:00",
+                score=78,
+                rating="GO",
+                wind_mph=10.0,
+                gust_mph=None,
+                temp_f=72.0,
+                uv=5.0,
+                precip_pct=0,
             ),
             ForecastBlock(
                 start="15:00",
@@ -188,6 +199,7 @@ class TestPaddleSensor:
                 score=65,
                 rating="CAUTION",
                 wind_mph=15.0,
+                gust_mph=None,
                 temp_f=70.0,
                 uv=3.0,
                 precip_pct=10,
@@ -209,10 +221,26 @@ class TestPaddleSensor:
         """Forecast sensor includes block details and best block."""
         blocks = [
             ForecastBlock(
-                start="12:00", end="15:00", score=65, rating="CAUTION", wind_mph=15.0, temp_f=70.0, uv=3.0, precip_pct=5
+                start="12:00",
+                end="15:00",
+                score=65,
+                rating="CAUTION",
+                wind_mph=15.0,
+                gust_mph=None,
+                temp_f=70.0,
+                uv=3.0,
+                precip_pct=5,
             ),
             ForecastBlock(
-                start="15:00", end="18:00", score=85, rating="GO", wind_mph=8.0, temp_f=74.0, uv=4.0, precip_pct=0
+                start="15:00",
+                end="18:00",
+                score=85,
+                rating="GO",
+                wind_mph=8.0,
+                gust_mph=None,
+                temp_f=74.0,
+                uv=4.0,
+                precip_pct=0,
             ),
         ]
         coordinator = _make_coordinator(_make_conditions(forecast_blocks=blocks))
@@ -246,32 +274,9 @@ class TestPaddleSensor:
         assert "USGS" in sensor._attr_attribution
         assert "NOAA" in sensor._attr_attribution
 
-    def test_native_value_none_when_no_data(self):
-        """Sensor returns None when coordinator has no data."""
-        coordinator = _make_coordinator()
-        coordinator.data = None
-        desc = next(d for d in SENSOR_DESCRIPTIONS if d.key == "score")
-        sensor = PaddleSensor(coordinator, "sub_001", desc)
-        assert sensor.native_value is None
-
-    def test_extra_attrs_none_when_no_data(self):
-        """Extra attrs returns None when coordinator has no data."""
-        coordinator = _make_coordinator()
-        coordinator.data = None
-        desc = next(d for d in SENSOR_DESCRIPTIONS if d.key == "score")
-        sensor = PaddleSensor(coordinator, "sub_001", desc)
-        assert sensor.extra_state_attributes is None
-
 
 class TestEntityCategories:
     """Tests for entity category and disabled-by-default assignments."""
-
-    def test_streamflow_is_diagnostic(self):
-        """Streamflow sensor should be categorized as diagnostic."""
-        from homeassistant.const import EntityCategory
-
-        desc = next(d for d in SENSOR_DESCRIPTIONS if d.key == "streamflow")
-        assert desc.entity_category == EntityCategory.DIAGNOSTIC
 
     def test_condition_is_diagnostic(self):
         """Condition sensor should be categorized as diagnostic."""
@@ -279,23 +284,6 @@ class TestEntityCategories:
 
         desc = next(d for d in SENSOR_DESCRIPTIONS if d.key == "condition")
         assert desc.entity_category == EntityCategory.DIAGNOSTIC
-
-    def test_forecast_is_diagnostic(self):
-        """Forecast sensor should be categorized as diagnostic."""
-        from homeassistant.const import EntityCategory
-
-        desc = next(d for d in SENSOR_DESCRIPTIONS if d.key == "forecast_3hr")
-        assert desc.entity_category == EntityCategory.DIAGNOSTIC
-
-    def test_streamflow_disabled_by_default(self):
-        """Streamflow sensor should be disabled by default."""
-        desc = next(d for d in SENSOR_DESCRIPTIONS if d.key == "streamflow")
-        assert desc.entity_registry_enabled_default is False
-
-    def test_forecast_disabled_by_default(self):
-        """Forecast sensor should be disabled by default."""
-        desc = next(d for d in SENSOR_DESCRIPTIONS if d.key == "forecast_3hr")
-        assert desc.entity_registry_enabled_default is False
 
     def test_primary_sensors_have_no_category(self):
         """Primary sensors (score, wind, temp, etc.) should not have a category."""

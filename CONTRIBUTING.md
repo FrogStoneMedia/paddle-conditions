@@ -68,7 +68,6 @@ custom_components/
     ├── scoring.py               # Scoring engine (pure functions)
     ├── profiles.py              # Profile definitions (curves, weights, vetoes)
     ├── models.py                # Data models (PaddleScore, PaddleConditions, etc.)
-    ├── cloud_sync.py            # Cloud sync client
     ├── const.py                 # Constants and config keys
     ├── diagnostics.py           # HA diagnostics with key redaction
     ├── presets.py               # Preset location definitions
@@ -95,7 +94,6 @@ tests/
 ├── test_api_open_meteo.py
 ├── test_api_usgs.py
 ├── test_api_noaa.py
-├── test_cloud_sync.py
 └── test_diagnostics.py
 ```
 
@@ -129,7 +127,6 @@ Start with the simplest possible test case. Build up complexity incrementally. E
 - Sensor entity creation, unique IDs, and state values
 - Hard veto conditions
 - Missing data / weight renormalization
-- Cloud sync push/pull and failure queuing
 
 ---
 

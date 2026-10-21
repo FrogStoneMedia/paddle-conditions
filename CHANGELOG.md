@@ -1,5 +1,43 @@
 # Changelog
 
+## 2.0.0
+
+Requires Home Assistant 2026.9 or later.
+
+### Breaking
+- Conditions sensor states are now keys such as `partly_cloudy` instead of English text. The displayed text is unchanged and now translatable. Update automations that compared against the old text.
+- Cloud sync is removed. It posted to an endpoint the Paddle Conditions API no longer has, so it never worked; the saved URL and token are deleted on upgrade.
+- 3-Hour Forecast is enabled by default and no longer a diagnostic entity. Streamflow is enabled for locations with a USGS station. On upgrade, these sensors are enabled if the old defaults disabled them; ones you disabled yourself stay disabled.
+- Forecast attributes (`blocks`, `best_block`, `best_score` and the `hourly_*` arrays) are no longer written to the recorder. Live attributes are unchanged, but history graphs and statistics of those attributes stop growing.
+
+### Added
+- Rating sensor (Go / Caution / No-go) for automations
+- Optional free USGS API key for faster river updates (every 15 to 20 minutes instead of hourly)
+- Repair issue when USGS rate limits your network, cleared automatically on recovery
+- Wind gusts in the hourly forecast and in each forecast block
+- Automation example, known limitations and removal instructions in the README
+
+### Changed
+- USGS data comes from the new USGS Water Data API. The old WaterServices API slows down from November 16, 2026 and shuts down February 22, 2027.
+- USGS is polled hourly (every 15 to 20 minutes with a key; it is checked on each regular update) instead of on every weather update
+- USGS and NOAA readings older than six hours are dropped, even when the service still returns them
+- Forecast starts at the current hour; hourly times are UTC with an explicit offset
+- Wind Direction uses angle statistics, so long-term averages are correct
+- Locations follow their display order in the generated dashboard
+- Diagnostics redact coordinates, location names and the USGS key, and show which sources are failing
+
+### Fixed
+- The 3-hour forecast showed blocks from earlier in the day
+- Rain chance had no effect on forecast block scores
+- Saving options removed the streamflow and tide weights, so river locations stopped scoring flow. Weights lost this way are restored on upgrade.
+- When the weather API was down, the last score stayed on screen as current indefinitely. It now goes unavailable after an hour, or two update intervals if that is longer.
+- Editing a location reloaded the integration twice
+- Dashboard cards could be added to Lovelace more than once; existing duplicates are cleaned up
+- The generated dashboard guessed entity IDs; it now uses your actual score entities, and the score card re-renders for a renamed score entity
+- A factor weighted 0 could still be reported as the limiting factor
+- Missing hourly values from Open-Meteo could stop updates
+- Unknown weather codes (freezing rain, snow grains, snow showers) showed as empty conditions
+
 ## 1.0.0
 
 ### Added

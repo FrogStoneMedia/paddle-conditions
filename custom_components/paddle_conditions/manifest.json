@@ -1,13 +1,19 @@
 {
   "domain": "paddle_conditions",
   "name": "Paddle Conditions",
-  "codeowners": ["@FrogStoneMedia", "@michaelkahn"],
+  "codeowners": [
+    "@FrogStoneMedia",
+    "@michaelkahn"
+  ],
   "config_flow": true,
-  "dependencies": ["http"],
+  "dependencies": [
+    "frontend",
+    "http"
+  ],
   "documentation": "https://github.com/FrogStoneMedia/paddle-conditions",
   "integration_type": "service",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/FrogStoneMedia/paddle-conditions/issues",
   "requirements": [],
-  "version": "1.0.0"
+  "version": "2.0.0"
 }

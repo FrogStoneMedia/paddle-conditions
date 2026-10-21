@@ -9,13 +9,14 @@ from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 
+from custom_components.paddle_conditions.api.base import APIError
 from custom_components.paddle_conditions.const import DOMAIN
 
-pytestmark = pytest.mark.usefixtures("enable_custom_integrations")
+pytestmark = pytest.mark.usefixtures("enable_custom_integrations", "mock_apis")
 
-WEATHER_CLIENT_PATH = "custom_components.paddle_conditions.api.open_meteo.OpenMeteoWeatherClient"
+WEATHER_CLIENT_PATH = "custom_components.paddle_conditions.config_flow.OpenMeteoWeatherClient"
 SESSION_PATH = "homeassistant.helpers.aiohttp_client.async_get_clientsession"
-FRONTEND_PATH = "custom_components.paddle_conditions._async_register_frontend"
+FRONTEND_PATH = "custom_components.paddle_conditions.async_register_cards"
 
 
 @pytest.fixture(autouse=True)
@@ -150,8 +151,6 @@ async def test_options_flow(hass: HomeAssistant):
             "weight_uv_index": 10,
             "weight_visibility": 10,
             "weight_precipitation": 5,
-            "cloud_sync_url": "",
-            "cloud_sync_token": "",
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
@@ -159,7 +158,10 @@ async def test_options_flow(hass: HomeAssistant):
     assert entry.options["update_interval"] == 15
     # Verify weights were normalized to sum to 1.0
     weights = entry.options["weights"]
-    assert abs(sum(weights.values()) - 1.0) < 0.001
+    # The seven slider weights normalize to 1.0; streamflow and tide are kept as-is
+    # and the scorer renormalizes per location.
+    sliders = {k: v for k, v in weights.items() if k not in ("streamflow", "tide")}
+    assert abs(sum(sliders.values()) - 1.0) < 0.001
     assert abs(weights["wind_speed"] - 0.30) < 0.01
 
 
@@ -185,42 +187,11 @@ async def test_options_flow_all_zero_weights_fallback(hass: HomeAssistant):
             "weight_uv_index": 0,
             "weight_visibility": 0,
             "weight_precipitation": 0,
-            "cloud_sync_url": "",
-            "cloud_sync_token": "",
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     expected = get_profile("sup", "recreational").weights
     assert entry.options["weights"] == expected
-
-
-async def test_options_flow_cloud_sync_fields(hass: HomeAssistant):
-    """Test that cloud sync URL and token are saved in options."""
-    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
-    result = await hass.config_entries.flow.async_configure(result["flow_id"], user_input={})
-    entry = result["result"]
-
-    result = await hass.config_entries.options.async_init(entry.entry_id)
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"],
-        user_input={
-            "activity": "sup",
-            "profile": "recreational",
-            "update_interval": 10,
-            "weight_wind_speed": 30,
-            "weight_wind_gusts": 10,
-            "weight_air_quality": 20,
-            "weight_temperature": 15,
-            "weight_uv_index": 10,
-            "weight_visibility": 10,
-            "weight_precipitation": 5,
-            "cloud_sync_url": "https://sync.paddleconditions.com",
-            "cloud_sync_token": "my-secret-token",
-        },
-    )
-    assert result["type"] == FlowResultType.CREATE_ENTRY
-    assert entry.options["cloud_sync_url"] == "https://sync.paddleconditions.com"
-    assert entry.options["cloud_sync_token"] == "my-secret-token"
 
 
 async def test_options_flow_activity_change_resets_profile(hass: HomeAssistant):
@@ -253,8 +224,6 @@ async def test_options_flow_activity_change_resets_profile(hass: HomeAssistant):
             "weight_uv_index": 10,
             "weight_visibility": 10,
             "weight_precipitation": 5,
-            "cloud_sync_url": "",
-            "cloud_sync_token": "",
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
@@ -283,7 +252,7 @@ async def test_location_subentry_weather_api_failure(hass: HomeAssistant):
 
     # Submit location with weather API failing
     with patch(SESSION_PATH), patch(WEATHER_CLIENT_PATH) as mock_cls:
-        mock_cls.return_value.fetch = AsyncMock(side_effect=Exception("API unreachable"))
+        mock_cls.return_value.fetch = AsyncMock(side_effect=APIError("API unreachable"))
         result = await hass.config_entries.subentries.async_configure(
             result["flow_id"],
             user_input={
@@ -297,3 +266,117 @@ async def test_location_subentry_weather_api_failure(hass: HomeAssistant):
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "location"
     assert result["errors"] == {"base": "cannot_connect"}
+
+
+async def test_options_flow_keeps_weights_without_sliders(hass: HomeAssistant):
+    """Saving options must not drop the streamflow and tide weights, which have no slider."""
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], user_input={})
+    entry = result["result"]
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={
+            "activity": "sup",
+            "profile": "recreational",
+            "update_interval": 20,
+            "weight_wind_speed": 30,
+            "weight_wind_gusts": 10,
+            "weight_air_quality": 20,
+            "weight_temperature": 15,
+            "weight_uv_index": 10,
+            "weight_visibility": 10,
+            "weight_precipitation": 5,
+        },
+    )
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    weights = entry.options["weights"]
+    assert weights["streamflow"] == pytest.approx(0.15)
+    assert weights["tide"] == pytest.approx(0.10)
+    assert weights["wind_speed"] == pytest.approx(0.30)
+
+
+@pytest.mark.parametrize(("submitted", "stored"), [("k-123", "k-123"), ("", None)])
+async def test_options_flow_usgs_api_key(hass: HomeAssistant, submitted, stored):
+    """The USGS key is saved when given and left out entirely when blank."""
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], user_input={})
+    entry = result["result"]
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"update_interval": 10, "usgs_api_key": submitted}
+    )
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert entry.options.get("usgs_api_key") == stored
+
+
+async def test_dropdowns_use_translated_options(hass: HomeAssistant):
+    """Option labels come from strings.json, not hard-coded English."""
+    import json
+    from pathlib import Path
+
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], user_input={})
+    entry = result["result"]
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    selectors = {
+        str(key): value.config for key, value in result["data_schema"].schema.items() if hasattr(value, "config")
+    }
+    strings = json.loads((Path(__file__).parents[1] / "custom_components/paddle_conditions/strings.json").read_text())[
+        "selector"
+    ]
+
+    for field in ("activity", "profile"):
+        config = selectors[field]
+        assert config["translation_key"] == field
+        assert set(config["options"]) <= set(strings[field]["options"])
+
+
+async def _options_entry(hass: HomeAssistant, options: dict | None = None):
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], user_input={})
+    entry = result["result"]
+    if options:
+        hass.config_entries.async_update_entry(entry, options=options)
+    return entry
+
+
+async def test_options_flow_profile_change_loads_profile_weights(hass: HomeAssistant):
+    """Picking another profile for the same activity resets weights to that profile's."""
+    from custom_components.paddle_conditions.profiles import get_profile
+
+    entry = await _options_entry(hass)
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"activity": "sup", "profile": "racing", "update_interval": 10}
+    )
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert entry.options["profile"] == "racing"
+    assert entry.options["weights"] == get_profile("sup", "racing").weights
+
+
+async def test_options_form_offers_kayaking_profiles(hass: HomeAssistant):
+    entry = await _options_entry(hass, {"activity": "kayaking", "profile": "river"})
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+
+    profile = next(v for k, v in result["data_schema"].schema.items() if str(k) == "profile")
+    assert profile.config["options"] == ["flatwater", "river", "ocean"]
+
+
+async def test_options_flow_restores_missing_hidden_weights(hass: HomeAssistant):
+    """Stored weights missing streamflow (from the old bug) get the profile's back on save."""
+    entry = await _options_entry(hass, {"weights": {"wind_speed": 1.0}})
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"update_interval": 10, "weight_wind_speed": 100}
+    )
+
+    assert entry.options["weights"]["streamflow"] == pytest.approx(0.15)

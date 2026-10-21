@@ -1,19 +1,53 @@
 {
   "entity": {
     "sensor": {
-      "paddle_score": { "default": "mdi:scoreboard-outline" },
-      "wind_speed": { "default": "mdi:weather-windy" },
-      "wind_gusts": { "default": "mdi:weather-windy-variant" },
-      "wind_direction": { "default": "mdi:compass-outline" },
-      "air_temp": { "default": "mdi:thermometer" },
-      "water_temp": { "default": "mdi:thermometer-water" },
-      "uv_index": { "default": "mdi:white-balance-sunny" },
-      "aqi": { "default": "mdi:air-filter" },
-      "visibility": { "default": "mdi:eye-outline" },
-      "precipitation": { "default": "mdi:weather-rainy" },
-      "streamflow": { "default": "mdi:waves" },
-      "condition": { "default": "mdi:cloud-outline" },
-      "forecast_3hr": { "default": "mdi:chart-timeline-variant" }
+      "paddle_score": {
+        "default": "mdi:scoreboard-outline"
+      },
+      "rating": {
+        "default": "mdi:kayaking",
+        "state": {
+          "go": "mdi:check-circle-outline",
+          "caution": "mdi:alert-outline",
+          "no_go": "mdi:close-octagon-outline"
+        }
+      },
+      "wind_speed": {
+        "default": "mdi:weather-windy"
+      },
+      "wind_gusts": {
+        "default": "mdi:weather-windy-variant"
+      },
+      "wind_direction": {
+        "default": "mdi:compass-outline"
+      },
+      "air_temp": {
+        "default": "mdi:thermometer"
+      },
+      "water_temp": {
+        "default": "mdi:thermometer-water"
+      },
+      "uv_index": {
+        "default": "mdi:white-balance-sunny"
+      },
+      "aqi": {
+        "default": "mdi:air-filter"
+      },
+      "visibility": {
+        "default": "mdi:eye-outline"
+      },
+      "precipitation": {
+        "default": "mdi:weather-rainy"
+      },
+      "streamflow": {
+        "default": "mdi:waves"
+      },
+      "condition": {
+        "default": "mdi:cloud-outline"
+      },
+      "forecast_3hr": {
+        "default": "mdi:chart-timeline-variant"
+      }
     }
   },
   "services": {

@@ -309,7 +309,8 @@ def compute_paddle_score(
             sub_score = scorer(value)
         if sub_score is not None:
             factor_scores[factor_name] = sub_score
-        else:
+        elif weights.get(factor_name, 0) > 0:
+            # A factor the user weighted 0 isn't "missing"; matches the API.
             missing.append(factor_name)
 
     # Water-body-type-driven factors
@@ -367,7 +368,9 @@ def compute_paddle_score(
     else:
         rating = "NO_GO"
 
-    limiting = min(factor_scores, key=lambda k: factor_scores[k]) if factor_scores else None
+    # Only factors that count toward the score can limit it; matches the API.
+    weighted = [k for k in factor_scores if weights.get(k, 0) > 0]
+    limiting = min(weighted, key=lambda k: factor_scores[k]) if weighted else None
 
     return PaddleScore(
         value=score_value,
