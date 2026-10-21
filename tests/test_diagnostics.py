@@ -8,7 +8,16 @@ import pytest
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.components.diagnostics import get_diagnostics_for_config_entry
 
-from .conftest import AQI_URL, LAKE_SUBENTRY_ID, USGS_URL, WEATHER_URL, make_weather_payload, setup_integration
+from .conftest import (
+    AQI_URL,
+    LAKE_SUBENTRY_ID,
+    NWS_GRID_URL,
+    NWS_POINTS_URL,
+    USGS_URL,
+    WEATHER_URL,
+    make_weather_payload,
+    setup_integration,
+)
 
 pytestmark = pytest.mark.usefixtures("enable_custom_integrations", "mock_frontend")
 
@@ -19,6 +28,8 @@ async def test_diagnostics_hide_location_and_show_health(
     aioclient_mock.get(WEATHER_URL, json=make_weather_payload())
     aioclient_mock.get(AQI_URL, exc=TimeoutError())
     aioclient_mock.get(USGS_URL, json={"features": []})
+    aioclient_mock.get(NWS_POINTS_URL, json={"properties": {"forecastGridData": NWS_GRID_URL}})
+    aioclient_mock.get(NWS_GRID_URL, json={"properties": {}})
     await setup_integration(hass, config_entry)
 
     diag = await get_diagnostics_for_config_entry(hass, hass_client, config_entry)

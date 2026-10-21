@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -120,6 +121,8 @@ NOAA_URL = "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter"
 PC_DIRECTORY_URL = "https://api.paddleconditions.com/public/spots/directory"
 PC_STATIONS_URL = "https://api.paddleconditions.com/public/spot/{slug}/stations"
 CDEC_URL = "https://cdec.water.ca.gov/dynamicapp/req/JSONDataServlet"
+NWS_POINTS_URL = re.compile(r"^https://api\.weather\.gov/points/")
+NWS_GRID_URL = "https://api.weather.gov/gridpoints/STO/54,72"
 
 PC_DIRECTORY = {
     "states": [
@@ -257,6 +260,9 @@ def mock_apis(aioclient_mock):
     aioclient_mock.get(PC_STATIONS_URL.format(slug="lake-oroville-ca"), json=PC_OROVILLE_STATIONS)
     # CDEC serves JSON as text/plain.
     aioclient_mock.get(CDEC_URL, text="[]")
+    # NWS answers but forecasts nothing, so Open-Meteo values stand unless a test serves a forecast.
+    aioclient_mock.get(NWS_POINTS_URL, json={"properties": {"forecastGridData": NWS_GRID_URL}})
+    aioclient_mock.get(NWS_GRID_URL, json={"properties": {}})
     return aioclient_mock
 
 

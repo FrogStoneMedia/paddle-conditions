@@ -18,6 +18,7 @@ from homeassistant.util.hass_dict import HassKey
 from .api.base import RateLimitedError
 from .api.cdec import CDEC_TZ, CDECClient, CDECData, CDECReading
 from .api.noaa import NOAAClient
+from .api.nws import NWSClient, NWSForecast, is_us_location, overlay
 from .api.open_meteo import THUNDERSTORM_CODES, AQIData, OpenMeteoAQIClient, OpenMeteoWeatherClient, WeatherData
 from .api.paddle_conditions import PaddleConditionsClient
 from .api.usgs import USGSClient, USGSData
@@ -73,6 +74,9 @@ CDEC_MAX_AGE = timedelta(hours=6)
 # Stage baselines are curated by hand; a daily read is plenty.
 BASELINE_INTERVAL = timedelta(days=1)
 BASELINE_RETRY = timedelta(hours=1)
+# NWS gridpoint forecasts update about hourly (and say so in Cache-Control).
+NWS_INTERVAL = timedelta(hours=1)
+NWS_RETRY = timedelta(minutes=15)
 
 
 class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):
@@ -131,6 +135,9 @@ class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):
         self.pc_client = PaddleConditionsClient(session)
         self._stage_baselines: dict[str, dict[int, StageBaseline]] = {}
         self._baselines_next_fetch = dt_util.utcnow()
+        self.nws_client = NWSClient(session) if is_us_location(self.latitude, self.longitude) else None
+        self._nws_forecast: NWSForecast | None = None
+        self._nws_next_fetch = dt_util.utcnow()
 
     async def _async_setup(self) -> None:
         """Start from the last good conditions, if they are recent and for this exact location."""
@@ -171,6 +178,8 @@ class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):
             sources["NOAA"] = self.noaa_client.fetch_water_temp(self.noaa_station_id)
         if self.cdec_station_ids and now >= self._cdec_next_fetch:
             sources["CDEC"] = self._fetch_cdec(now)
+        if self.nws_client is not None and now >= self._nws_next_fetch:
+            sources["NWS"] = self.nws_client.fetch(self.latitude, self.longitude)
         if self.spot_slug and self.cdec_station_ids and now >= self._baselines_next_fetch:
             sources["Stage baselines"] = self.pc_client.spot_stations(self.spot_slug)
 
@@ -181,6 +190,7 @@ class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):
         if self.usgs_station_id:
             self._handle_usgs(now, outcomes.get("USGS"))
         self._handle_cdec(now, outcomes)
+        self._handle_nws(now, outcomes.get("NWS"))
 
         # Weather drives the score. Without it, keep recent conditions briefly,
         # then let the entities go unavailable rather than show old data as current.
@@ -195,6 +205,9 @@ class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):
                 translation_placeholders={"location": self.location_name, "error": str(weather)},
             ) from weather
         self._source_ok("Weather")
+        if self._nws_forecast is not None:
+            # NWS handles large lakes better; Open-Meteo still supplies UV, visibility and conditions.
+            weather = overlay(weather, self._nws_forecast, now)
 
         optional: dict[str, Any] = {}
         for source in ("Air quality", "NOAA"):
@@ -379,6 +392,18 @@ class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):
                 self._source_ok("Stage baselines")
                 self._stage_baselines = spot.stage_baselines
                 self._baselines_next_fetch = now + BASELINE_INTERVAL
+
+    def _handle_nws(self, now: datetime, outcome: NWSForecast | BaseException | None) -> None:
+        """Keep the last NWS forecast; on failure, Open-Meteo alone covers what it doesn't."""
+        if outcome is None:  # Not due, or not a US location.
+            return
+        if isinstance(outcome, BaseException):
+            self._source_failed("NWS", outcome)
+            self._nws_next_fetch = now + NWS_RETRY
+        else:
+            self._source_ok("NWS")
+            self._nws_forecast = outcome
+            self._nws_next_fetch = now + NWS_INTERVAL
 
     def _current_cdec(self, now: datetime) -> tuple[dict[str, float], dict[str, str]]:
         """Each CDEC value from the nearest station that observed it recently, and that station."""

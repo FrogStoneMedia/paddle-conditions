@@ -275,7 +275,9 @@ class PaddleSensor(CoordinatorEntity[PaddleCoordinator], SensorEntity):
     """A Paddle Conditions sensor entity."""
 
     _attr_has_entity_name = True
-    _attr_attribution = "Data provided by Open-Meteo, USGS, NOAA, CDEC and Paddle Conditions"
+    _attr_attribution = (
+        "Data provided by Open-Meteo, the National Weather Service, USGS, NOAA, CDEC and Paddle Conditions"
+    )
     # Forecast series are large and change every update; keep them out of the recorder.
     _unrecorded_attributes = frozenset(
         {
