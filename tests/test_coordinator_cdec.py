@@ -156,8 +156,8 @@ async def test_cdec_down_is_logged_once_and_retried(hass: HomeAssistant, config_
 
     assert caplog.text.count("CDEC data for Folsom Lake is unavailable") == 1
     assert _conditions(config_entry).reservoir_storage_af is None
-    # Retried on every poll while failing: two stations, stopping at each one's first failed request.
-    assert _calls(aioclient_mock, CDEC_URL) == 4
+    # Retried on every poll while failing: two stations, and both requests each (one failing doesn't skip the other).
+    assert _calls(aioclient_mock, CDEC_URL) == 8
 
 
 @pytest.mark.parametrize("location_data", [RESERVOIR])
@@ -285,3 +285,31 @@ async def test_cdec_sensors_off_without_cdec_stations(hass: HomeAssistant, confi
     for key in ("river_stage", "reservoir_level", "dam_outflow"):
         entity_id = registry.async_get_entity_id("sensor", "paddle_conditions", f"{LAKE_SUBENTRY_ID}_{key}")
         assert registry.async_get(entity_id).disabled_by is er.RegistryEntryDisabler.INTEGRATION
+
+
+@pytest.mark.parametrize("location_data", [RESERVOIR])
+async def test_failed_station_keeps_its_recent_reading(hass: HomeAssistant, config_entry, aioclient_mock, freezer):
+    """FOL's high release stays a No-go when FOL times out on the next poll but AFO answers."""
+    _serve(aioclient_mock, {"FOL": [_record(23, 9500)], "AFO": [_record(25, 60.0)]})
+    await setup_integration(hass, config_entry)
+    assert _conditions(config_entry).score.vetoed
+
+    _serve(aioclient_mock, {"FOL": TimeoutError(), "AFO": [_record(25, 61.0)]})
+    await _tick(hass, freezer, 30)
+
+    conditions = _conditions(config_entry)
+    assert conditions.water_temp == 61.0
+    assert conditions.dam_outflow_cfs == 9500
+    assert conditions.score.vetoed
+
+
+@pytest.mark.parametrize("location_data", [{**RIVER, "usgs_station_id": ""}])
+async def test_streamflow_sensor_enabled_for_cdec_only_river(hass: HomeAssistant, config_entry, aioclient_mock):
+    from homeassistant.helpers import entity_registry as er
+
+    _serve(aioclient_mock, {"AFO": [_record(20, 1500)]})
+    await setup_integration(hass, config_entry)
+
+    registry = er.async_get(hass)
+    entity_id = registry.async_get_entity_id("sensor", "paddle_conditions", f"{LAKE_SUBENTRY_ID}_streamflow")
+    assert registry.async_get(entity_id).disabled_by is None

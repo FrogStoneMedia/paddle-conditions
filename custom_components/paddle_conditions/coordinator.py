@@ -77,6 +77,8 @@ BASELINE_RETRY = timedelta(hours=1)
 # NWS gridpoint forecasts update about hourly (and say so in Cache-Control).
 NWS_INTERVAL = timedelta(hours=1)
 NWS_RETRY = timedelta(minutes=15)
+# An old forecast still covers today's hours; past this, Open-Meteo's live values win.
+NWS_MAX_AGE = timedelta(hours=3)
 
 
 class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):
@@ -137,6 +139,7 @@ class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):
         self._baselines_next_fetch = dt_util.utcnow()
         self.nws_client = NWSClient(session) if is_us_location(self.latitude, self.longitude) else None
         self._nws_forecast: NWSForecast | None = None
+        self._nws_fetched = dt_util.utcnow()
         self._nws_next_fetch = dt_util.utcnow()
 
     async def _async_setup(self) -> None:
@@ -205,7 +208,7 @@ class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):
                 translation_placeholders={"location": self.location_name, "error": str(weather)},
             ) from weather
         self._source_ok("Weather")
-        if self._nws_forecast is not None:
+        if self._nws_forecast is not None and now - self._nws_fetched <= NWS_MAX_AGE:
             # NWS handles large lakes better; Open-Meteo still supplies UV, visibility and conditions.
             weather = overlay(weather, self._nws_forecast, now)
 
@@ -375,11 +378,17 @@ class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):
         if (cdec := outcomes.get("CDEC")) is not None:
             if isinstance(cdec, BaseException):  # Not expected: per-station errors are returned.
                 cdec = [(station, cdec) for station in self.cdec_station_ids]
-            readings = [(station, data) for station, data in cdec if isinstance(data, CDECData)]
+            fresh = {station: data for station, data in cdec if isinstance(data, CDECData)}
             errors = [err for _, err in cdec if isinstance(err, BaseException)]
-            if readings:
+            if fresh:
                 self._source_ok("CDEC")
-                self._cdec_readings = readings
+                # A station that failed this time keeps its last reading; CDEC_MAX_AGE expires it.
+                previous = dict(self._cdec_readings)
+                self._cdec_readings = [
+                    (station, data)
+                    for station in self.cdec_station_ids
+                    if (data := fresh.get(station) or previous.get(station)) is not None
+                ]
                 self._cdec_next_fetch = now + CDEC_INTERVAL
             else:
                 self._source_failed("CDEC", errors[0])
@@ -403,6 +412,7 @@ class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):
         else:
             self._source_ok("NWS")
             self._nws_forecast = outcome
+            self._nws_fetched = now
             self._nws_next_fetch = now + NWS_INTERVAL
 
     def _current_cdec(self, now: datetime) -> tuple[dict[str, float], dict[str, str]]:

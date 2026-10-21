@@ -477,7 +477,11 @@ def compute_paddle_score(
 
     # Renormalize weights for available factors
     available_weights = {k: weights[k] for k in factor_scores if k in weights}
-    total_weight = sum(available_weights.values())
+    # Accumulate left to right like the API's JavaScript: Python's sum() compensates
+    # float error (3.12+), which can move a score across x.5 and change the rating.
+    total_weight = 0.0
+    for w in available_weights.values():
+        total_weight += w
     if total_weight <= 0:
         return PaddleScore(
             value=0,
@@ -488,7 +492,9 @@ def compute_paddle_score(
             vetoed=False,
             veto_reason=None,
         )
-    weighted_sum = sum(factor_scores[k] * (v / total_weight) for k, v in available_weights.items())
+    weighted_sum = 0.0
+    for k, v in available_weights.items():
+        weighted_sum += factor_scores[k] * (v / total_weight)
 
     score_value = _round_half_up(weighted_sum)
     if score_value >= 70:
