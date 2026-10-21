@@ -71,3 +71,29 @@ async def test_reconfigure_unexpected_error_shows_unknown(hass: HomeAssistant, c
 
     assert result["type"] is FlowResultType.FORM
     assert result["errors"] == {"base": "unknown"}
+
+
+@pytest.mark.parametrize(
+    "location_data",
+    [{**LAKE_LOCATION, "spot_slug": "lake-natoma", "cdec_station_ids": "NAT", "dam_outflow_threshold_cfs": 5000}],
+)
+async def test_reconfigure_keeps_spot_link_and_clears_numbers(hass: HomeAssistant, config_entry, mock_apis):
+    """Editing keeps the curated spot link; a cleared number is cleared, not restored."""
+    await setup_integration(hass, config_entry)
+
+    result = await config_entry.start_subentry_reconfigure_flow(hass, LAKE_SUBENTRY_ID)
+    schema = {str(key): key for key in result["data_schema"].schema}
+    assert schema["dam_outflow_threshold_cfs"].description == {"suggested_value": 5000}
+
+    # The frontend omits a number field the user emptied.
+    submitted = {k: v for k, v in config_entry.subentries[LAKE_SUBENTRY_ID].data.items() if k in schema}
+    submitted.pop("dam_outflow_threshold_cfs")
+    submitted.pop("optimal_cfs")
+    with patch(FLOW_FETCH, AsyncMock()):
+        await hass.config_entries.subentries.async_configure(result["flow_id"], submitted)
+    await hass.async_block_till_done()
+
+    data = config_entry.subentries[LAKE_SUBENTRY_ID].data
+    assert data["spot_slug"] == "lake-natoma"
+    assert data["cdec_station_ids"] == "NAT"
+    assert data["dam_outflow_threshold_cfs"] is None

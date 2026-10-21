@@ -18,17 +18,19 @@
       },
       "error": {
         "cannot_connect": "Could not connect to weather service. Check coordinates and try again.",
-        "unknown": "Unexpected error. Check the Home Assistant log for details."
+        "unknown": "Unexpected error. Check the Home Assistant log for details.",
+        "spot_unavailable": "Could not load this spot from Paddle Conditions. Try again, or choose \"Custom location\".",
+        "unknown_spot": "Pick a spot from the list, or choose \"Custom location\"."
       },
       "step": {
         "user": {
           "title": "Add Paddle Location",
-          "description": "Pick a preset location to start with pre-filled coordinates and station IDs, or choose \"Custom location\" to enter everything yourself.",
+          "description": "Search the Paddle Conditions spots to start with coordinates and gauges filled in, or choose \"Custom location\" to enter everything yourself.",
           "data": {
             "preset": "Location"
           },
           "data_description": {
-            "preset": "Preset locations include coordinates and USGS station IDs where available"
+            "preset": "Type to search. Spots come with their USGS, NOAA and California (CDEC) gauges where available."
           }
         },
         "location": {
@@ -42,7 +44,10 @@
             "display_order": "Display order",
             "usgs_station_id": "USGS station ID",
             "noaa_station_id": "NOAA station ID",
-            "optimal_cfs": "Optimal streamflow (CFS)"
+            "optimal_cfs": "Optimal streamflow (CFS)",
+            "cdec_station_ids": "CDEC station IDs",
+            "reservoir_capacity_af": "Reservoir capacity",
+            "dam_outflow_threshold_cfs": "Dam release limit"
           },
           "data_description": {
             "name": "A friendly name for this spot, e.g. \"Lake Natoma\" or \"Deschutes River\"",
@@ -52,7 +57,10 @@
             "display_order": "Lower numbers appear first when you have multiple locations (0 = default)",
             "usgs_station_id": "For river streamflow data. Find your station at waterdata.usgs.gov",
             "noaa_station_id": "For water temperature data. Find your station at tidesandcurrents.noaa.gov",
-            "optimal_cfs": "Your preferred river flow in cubic feet per second. Only used for river locations."
+            "optimal_cfs": "Your preferred river flow in cubic feet per second. Only used for river locations.",
+            "cdec_station_ids": "California only. Comma-separated CDEC station IDs, nearest first, e.g. \"FOL, AFO\". Find them at cdec.water.ca.gov. Adds reservoir level, river stage and water quality to the score.",
+            "reservoir_capacity_af": "Full capacity in acre-feet, for scoring how full a lake is. Leave empty to skip.",
+            "dam_outflow_threshold_cfs": "Dam outflow above this makes the spot a No-go. Leave empty to skip."
           }
         },
         "reconfigure": {
@@ -66,7 +74,10 @@
             "display_order": "Display order",
             "usgs_station_id": "USGS station ID",
             "noaa_station_id": "NOAA station ID",
-            "optimal_cfs": "Optimal streamflow (CFS)"
+            "optimal_cfs": "Optimal streamflow (CFS)",
+            "cdec_station_ids": "CDEC station IDs",
+            "reservoir_capacity_af": "Reservoir capacity",
+            "dam_outflow_threshold_cfs": "Dam release limit"
           },
           "data_description": {
             "name": "A friendly name for this spot, e.g. \"Lake Natoma\" or \"Deschutes River\"",
@@ -76,7 +87,10 @@
             "display_order": "Lower numbers appear first when you have multiple locations (0 = default)",
             "usgs_station_id": "For river streamflow data. Find your station at waterdata.usgs.gov",
             "noaa_station_id": "For water temperature data. Find your station at tidesandcurrents.noaa.gov",
-            "optimal_cfs": "Your preferred river flow in cubic feet per second. Only used for river locations."
+            "optimal_cfs": "Your preferred river flow in cubic feet per second. Only used for river locations.",
+            "cdec_station_ids": "California only. Comma-separated CDEC station IDs, nearest first, e.g. \"FOL, AFO\". Find them at cdec.water.ca.gov. Adds reservoir level, river stage and water quality to the score.",
+            "reservoir_capacity_af": "Full capacity in acre-feet, for scoring how full a lake is. Leave empty to skip.",
+            "dam_outflow_threshold_cfs": "Dam outflow above this makes the spot a No-go. Leave empty to skip."
           }
         }
       }
