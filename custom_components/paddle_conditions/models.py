@@ -75,6 +75,15 @@ class PaddleConditions:
     hourly_precip: list[int | None]
     fetched_at: str  # UTC ISO 8601, when the weather data was fetched
     daylight: list[dict[str, str]] = field(default_factory=list)  # [{"sunrise", "sunset"}], UTC
+    # California CDEC readings; None where the location has no CDEC gauge.
+    river_stage_ft: float | None = None
+    reservoir_storage_af: float | None = None
+    reservoir_percent_full: float | None = None
+    dam_outflow_cfs: float | None = None
+    turbidity_ntu: float | None = None
+    dissolved_oxygen_mg_l: float | None = None
+    ph: float | None = None
+    conductivity_us: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to a JSON-compatible dict."""

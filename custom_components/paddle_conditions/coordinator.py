@@ -16,18 +16,24 @@ from homeassistant.util import dt as dt_util
 from homeassistant.util.hass_dict import HassKey
 
 from .api.base import RateLimitedError
+from .api.cdec import CDEC_TZ, CDECClient, CDECData, CDECReading
 from .api.noaa import NOAAClient
 from .api.open_meteo import THUNDERSTORM_CODES, AQIData, OpenMeteoAQIClient, OpenMeteoWeatherClient, WeatherData
+from .api.paddle_conditions import PaddleConditionsClient
 from .api.usgs import USGSClient, USGSData
 from .cache import PaddleCache, location_fingerprint
 from .const import (
     ACTIVITY_SUP,
     CONF_ACTIVITY,
+    CONF_CDEC_STATION_IDS,
+    CONF_DAM_OUTFLOW_THRESHOLD_CFS,
     CONF_LATITUDE,
     CONF_LONGITUDE,
     CONF_NOAA_STATION_ID,
     CONF_OPTIMAL_CFS,
     CONF_PROFILE,
+    CONF_RESERVOIR_CAPACITY_AF,
+    CONF_SPOT_SLUG,
     CONF_USGS_API_KEY,
     CONF_USGS_STATION_ID,
     CONF_WATER_BODY_TYPE,
@@ -38,7 +44,7 @@ from .const import (
 )
 from .models import ForecastBlock, PaddleConditions
 from .profiles import ProfileConfig, get_profile
-from .scoring import compute_paddle_score
+from .scoring import StageBaseline, compute_paddle_score
 
 type PaddleConfigEntry = ConfigEntry[dict[str, PaddleCoordinator]]
 
@@ -60,6 +66,13 @@ ISSUE_USGS_RATE_LIMITED = "usgs_rate_limited"
 # Locations currently rate limited by USGS. The repair issue is shared, so it
 # is only cleared once none are left.
 USGS_RATE_LIMITED: HassKey[set[str]] = HassKey(f"{DOMAIN}_usgs_rate_limited")
+
+# CDEC river and water quality gauges report every 15 minutes, reservoirs hourly.
+CDEC_INTERVAL = timedelta(minutes=30)
+CDEC_MAX_AGE = timedelta(hours=6)
+# Stage baselines are curated by hand; a daily read is plenty.
+BASELINE_INTERVAL = timedelta(days=1)
+BASELINE_RETRY = timedelta(hours=1)
 
 
 class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):
@@ -90,6 +103,12 @@ class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):
         self.usgs_station_id: str = subentry.data.get(CONF_USGS_STATION_ID, "")
         self.noaa_station_id: str = subentry.data.get(CONF_NOAA_STATION_ID, "")
         self.optimal_cfs: float | None = subentry.data.get(CONF_OPTIMAL_CFS)
+        self.cdec_station_ids = [
+            part.strip() for part in str(subentry.data.get(CONF_CDEC_STATION_IDS) or "").split(",") if part.strip()
+        ]
+        self.reservoir_capacity_af: float | None = subentry.data.get(CONF_RESERVOIR_CAPACITY_AF)
+        self.dam_outflow_threshold_cfs: float | None = subentry.data.get(CONF_DAM_OUTFLOW_THRESHOLD_CFS)
+        self.spot_slug: str | None = subentry.data.get(CONF_SPOT_SLUG)
         self.stale_after = max(MIN_STALE_AFTER, 2 * interval)
 
         self._cache = cache
@@ -105,6 +124,13 @@ class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):
         self._usgs_next_fetch = dt_util.utcnow()
         config_entry.async_on_unload(self._clear_usgs_rate_limit)
         self.noaa_client = NOAAClient(session)
+        self.cdec_client = CDECClient(session)
+        # Per station, nearest first, as last read.
+        self._cdec_readings: list[tuple[str, CDECData]] = []
+        self._cdec_next_fetch = dt_util.utcnow()
+        self.pc_client = PaddleConditionsClient(session)
+        self._stage_baselines: dict[str, dict[int, StageBaseline]] = {}
+        self._baselines_next_fetch = dt_util.utcnow()
 
     async def _async_setup(self) -> None:
         """Start from the last good conditions, if they are recent and for this exact location."""
@@ -143,6 +169,10 @@ class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):
             sources["USGS"] = self.usgs_client.fetch(self.usgs_station_id)
         if self.noaa_station_id:
             sources["NOAA"] = self.noaa_client.fetch_water_temp(self.noaa_station_id)
+        if self.cdec_station_ids and now >= self._cdec_next_fetch:
+            sources["CDEC"] = self._fetch_cdec(now)
+        if self.spot_slug and self.cdec_station_ids and now >= self._baselines_next_fetch:
+            sources["Stage baselines"] = self.pc_client.spot_stations(self.spot_slug)
 
         outcomes = dict(zip(sources, await asyncio.gather(*sources.values(), return_exceptions=True), strict=True))
 
@@ -150,6 +180,7 @@ class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):
         # survive a weather outage.
         if self.usgs_station_id:
             self._handle_usgs(now, outcomes.get("USGS"))
+        self._handle_cdec(now, outcomes)
 
         # Weather drives the score. Without it, keep recent conditions briefly,
         # then let the entities go unavailable rather than show old data as current.
@@ -180,15 +211,28 @@ class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):
         noaa_water_temp: float | None = optional.get("NOAA")
         usgs_temp, streamflow_cfs = self._current_usgs(now)
 
-        # Prefer USGS water temperature, fall back to NOAA.
-        water_temp = usgs_temp if usgs_temp is not None else noaa_water_temp
+        cdec, cdec_stations = self._current_cdec(now)
+        # California gauges take precedence, as in the Paddle Conditions API; then USGS, then NOAA.
+        water_temp = next((t for t in (cdec.get("water_temp_f"), usgs_temp, noaa_water_temp) if t is not None), None)
+        if cdec.get("flow_cfs") is not None:
+            streamflow_cfs = cdec["flow_cfs"]
         aqi = aqi_data.aqi if aqi_data else None
+        storage = cdec.get("storage_af")
+        percent_full = (
+            round(storage / self.reservoir_capacity_af * 100, 1)
+            if storage is not None and self.reservoir_capacity_af
+            else None
+        )
+        water_quality: dict[str, float | None] = {
+            key: cdec[key] for key in ("turbidity_ntu", "dissolved_oxygen_mg_l", "ph", "conductivity_us") if key in cdec
+        }
 
         options = self.config_entry.options
         activity = options.get(CONF_ACTIVITY, ACTIVITY_SUP)
         profile_name = options.get(CONF_PROFILE, DEFAULT_PROFILES.get(activity, "recreational"))
         profile = get_profile(activity, profile_name)
-        weights: dict[str, float] = options.get("weights", profile.weights)
+        # Weights saved before a factor existed lack it; fall back to the profile's.
+        weights: dict[str, float] = {**profile.weights, **options.get("weights", {})}
 
         score = compute_paddle_score(
             wind_speed=weather.wind_speed,
@@ -207,6 +251,14 @@ class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):
             curves=profile.curves,
             temp_curve=profile.temp_curve,
             veto_thresholds=profile.vetoes,
+            reservoir_storage_af=storage,
+            reservoir_capacity_af=self.reservoir_capacity_af,
+            river_stage_ft=cdec.get("river_stage_ft"),
+            stage_baseline=self._stage_baseline(cdec_stations.get("river_stage_ft"), now),
+            stage_inverted=profile.river_stage_inverted,
+            water_quality=water_quality or None,
+            dam_outflow_cfs=cdec.get("outflow_cfs"),
+            dam_outflow_threshold_cfs=self.dam_outflow_threshold_cfs,
         )
 
         conditions = PaddleConditions(
@@ -234,6 +286,14 @@ class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):
             hourly_precip=weather.hourly_precip,
             fetched_at=dt_util.utcnow().isoformat(),
             daylight=[{"sunrise": rise, "sunset": down} for rise, down in weather.daylight],
+            river_stage_ft=cdec.get("river_stage_ft"),
+            reservoir_storage_af=storage,
+            reservoir_percent_full=percent_full,
+            dam_outflow_cfs=cdec.get("outflow_cfs"),
+            turbidity_ntu=cdec.get("turbidity_ntu"),
+            dissolved_oxygen_mg_l=cdec.get("dissolved_oxygen_mg_l"),
+            ph=cdec.get("ph"),
+            conductivity_us=cdec.get("conductivity_us"),
         )
         self._cache.set(self.subentry_id, self._fingerprint, conditions)
         return conditions
@@ -289,6 +349,53 @@ class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):
             reading.water_temp_f if recent(reading.water_temp_observed) else None,
             reading.streamflow_cfs if recent(reading.streamflow_observed) else None,
         )
+
+    async def _fetch_cdec(self, now: datetime) -> list[tuple[str, CDECData | BaseException]]:
+        """Read every CDEC station; one failing station doesn't sink the rest."""
+        results = await asyncio.gather(
+            *(self.cdec_client.fetch(station, now) for station in self.cdec_station_ids), return_exceptions=True
+        )
+        return list(zip(self.cdec_station_ids, results, strict=True))
+
+    def _handle_cdec(self, now: datetime, outcomes: dict[str, Any]) -> None:
+        """Record CDEC readings and stage baselines and decide when to ask again."""
+        if (cdec := outcomes.get("CDEC")) is not None:
+            if isinstance(cdec, BaseException):  # Not expected: per-station errors are returned.
+                cdec = [(station, cdec) for station in self.cdec_station_ids]
+            readings = [(station, data) for station, data in cdec if isinstance(data, CDECData)]
+            errors = [err for _, err in cdec if isinstance(err, BaseException)]
+            if readings:
+                self._source_ok("CDEC")
+                self._cdec_readings = readings
+                self._cdec_next_fetch = now + CDEC_INTERVAL
+            else:
+                self._source_failed("CDEC", errors[0])
+                self._cdec_next_fetch = now  # Try again next poll.
+        if (spot := outcomes.get("Stage baselines")) is not None:
+            if isinstance(spot, BaseException):
+                self._source_failed("Stage baselines", spot)
+                self._baselines_next_fetch = now + BASELINE_RETRY
+            else:
+                self._source_ok("Stage baselines")
+                self._stage_baselines = spot.stage_baselines
+                self._baselines_next_fetch = now + BASELINE_INTERVAL
+
+    def _current_cdec(self, now: datetime) -> tuple[dict[str, float], dict[str, str]]:
+        """Each CDEC value from the nearest station that observed it recently, and that station."""
+        values: dict[str, float] = {}
+        stations: dict[str, str] = {}
+        for station, data in self._cdec_readings:
+            for key, reading in vars(data).items():
+                if isinstance(reading, CDECReading) and key not in values and now - reading.observed <= CDEC_MAX_AGE:
+                    values[key] = reading.value
+                    stations[key] = station
+        return values, stations
+
+    def _stage_baseline(self, station: str | None, now: datetime) -> StageBaseline | None:
+        """This month's stage percentiles for the gauge that reported the stage (CDEC months are PST)."""
+        if station is None:
+            return None
+        return self._stage_baselines.get(station, {}).get(now.astimezone(CDEC_TZ).month)
 
     def _build_forecast_blocks(
         self, weather: WeatherData, aqi_data: AQIData | None, weights: dict[str, float], profile: ProfileConfig

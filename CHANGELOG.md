@@ -5,6 +5,7 @@
 ### Added
 - Adding a location starts with a searchable list of the curated Paddle Conditions spots, which fills in the coordinates, gauges and (for California) the CDEC stations, reservoir capacity and dam-release limit. If Paddle Conditions can't be reached, the built-in presets are offered instead.
 - Optional CDEC station, reservoir capacity and dam-release limit fields for California locations.
+- California locations with CDEC gauges are scored like the Paddle Conditions app: reservoir level, river stage against the spot's history for the month, water quality, and a No-go for a high dam release or a dangerous river level. CDEC water temperature and flow take precedence over USGS. CDEC is read every 30 minutes; readings older than six hours are dropped.
 
 ### Changed
 - Optional number fields (such as optimal streamflow) can now be cleared when editing a location; before, the old value came back.
