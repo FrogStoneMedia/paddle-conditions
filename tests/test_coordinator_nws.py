@@ -103,3 +103,19 @@ async def test_outside_the_us_uses_open_meteo_only(hass: HomeAssistant, config_e
     await setup_integration(hass, config_entry)
 
     assert not any("weather.gov" in str(call[1]) for call in aioclient_mock.mock_calls)
+
+
+async def test_old_nws_forecast_is_dropped_during_an_outage(hass: HomeAssistant, config_entry, aioclient_mock, freezer):
+    """A forecast that still covers now but is hours old must not mask fresh Open-Meteo wind."""
+    start = dt_util.utcnow().replace(minute=0, second=0, microsecond=0)
+    long_forecast = {
+        "properties": {"windSpeed": {"values": [{"validTime": f"{start.isoformat()}/PT24H", "value": 3.2}]}}
+    }
+    _serve(aioclient_mock, long_forecast)
+    await setup_integration(hass, config_entry)
+    assert _conditions(config_entry).wind_speed == 2.0
+
+    _serve(aioclient_mock, grid_status=404)
+    await _tick(hass, freezer, 4 * 60)
+
+    assert _conditions(config_entry).wind_speed == make_weather_payload()["current"]["wind_speed_10m"]

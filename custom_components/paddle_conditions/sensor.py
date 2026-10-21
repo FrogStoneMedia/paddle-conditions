@@ -153,7 +153,7 @@ SENSOR_DESCRIPTIONS: tuple[PaddleSensorEntityDescription, ...] = (
         native_unit_of_measurement="CFS",
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.streamflow_cfs,
-        enabled_fn=lambda coordinator: bool(coordinator.usgs_station_id),
+        enabled_fn=lambda coordinator: bool(coordinator.usgs_station_id or coordinator.cdec_station_ids),
     ),
     # California CDEC gauges: on for locations that have them.
     PaddleSensorEntityDescription(

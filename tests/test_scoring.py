@@ -979,3 +979,34 @@ def test_rounding_matches_javascript_half_up():
     # 100 - 50 * (11.25 - 10) / (20 - 10) = 93.75 -> 94 either way; pick an exact .5:
     assert _linear_score(12.5, 10, 20, 30) == 88  # 87.5 -> 88 (round() would give 88 too)
     assert _linear_score(11.5, 10, 20, 30) == 93  # 92.5 -> 93, round() gives 92
+
+
+def test_weighted_sum_accumulates_like_the_api():
+    """Python's sum() compensates float error since 3.12; the API adds left to right.
+
+    Same inputs, verified against the API's computePaddleScore: 69, CAUTION.
+    """
+    from custom_components.paddle_conditions.profiles import get_profile
+
+    p = get_profile("sup", "recreational")
+    score = compute_paddle_score(
+        wind_speed=10,
+        wind_gusts=12,
+        aqi=50,
+        air_temp=75,
+        uv_index=2,
+        visibility=10,
+        precipitation=0,
+        streamflow_cfs=None,
+        tide_current=None,
+        has_thunderstorm=False,
+        weights=p.weights,
+        water_body_type="lake",
+        curves=p.curves,
+        temp_curve=p.temp_curve,
+        veto_thresholds=p.vetoes,
+        reservoir_storage_af=300,
+        reservoir_capacity_af=1000,
+        water_quality={"turbidity_ntu": 100},
+    )
+    assert (score.value, score.rating) == (69, "CAUTION")

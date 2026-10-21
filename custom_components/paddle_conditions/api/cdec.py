@@ -119,6 +119,7 @@ class CDECClient(BaseAPIClient):
         window = {"Start": str(today - timedelta(days=2)), "End": str(today + timedelta(days=1))}
         station = station_id.strip().upper()
         readings: dict[str, CDECReading] = {}
+        errors: list[APIError] = []
         for dur_code, sensors in (("E", EVENT_SENSORS), ("H", HOURLY_SENSORS)):
             params = {
                 "Stations": station,
@@ -126,11 +127,19 @@ class CDECClient(BaseAPIClient):
                 "dur_code": dur_code,
                 **window,
             }
-            # CDEC serves its JSON as text/plain, which aiohttp's json() refuses.
-            text = await self._get_text(CDEC_URL, params=params)
+            # One failing request (say, the reservoir sensors) must not discard the other's readings.
             try:
+                # CDEC serves its JSON as text/plain, which aiohttp's json() refuses.
+                text = await self._get_text(CDEC_URL, params=params)
                 records = json.loads(text)
+            except APIError as err:
+                errors.append(err)
+                continue
             except ValueError as err:
-                raise APIError(f"CDEC returned invalid JSON for {station}") from err
+                errors.append(APIError(f"CDEC returned invalid JSON for {station}"))
+                errors[-1].__cause__ = err
+                continue
             readings |= _latest(records if isinstance(records, list) else [], sensors, now)
+        if len(errors) == 2:
+            raise errors[0]
         return CDECData(**readings)

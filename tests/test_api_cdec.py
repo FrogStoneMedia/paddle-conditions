@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -139,3 +140,26 @@ async def test_fetch_raises_api_error_on_invalid_json(mock_session):
     mock_session.get = mock_get_text("<html>maintenance</html>")
     with pytest.raises(APIError):
         await CDECClient(mock_session).fetch("AFO", now=NOW)
+
+
+async def test_hourly_failure_keeps_event_readings(mock_session):
+    """A river stage read successfully survives the reservoir request failing."""
+    from .conftest import mock_get_error
+
+    event = mock_get_text(json.dumps([_record(1, 6.30, "2026-10-21 14:00")])).return_value
+    hourly = mock_get_error(500, "boom").return_value
+    mock_session.get = MagicMock(side_effect=[event, hourly, hourly])
+    client = CDECClient(mock_session, retries=0)
+
+    data = await client.fetch("AFO", now=NOW)
+
+    assert data.river_stage_ft is not None
+    assert data.river_stage_ft.value == 6.30
+
+
+async def test_both_requests_failing_raises(mock_session):
+    from .conftest import mock_get_error
+
+    mock_session.get = mock_get_error(404, "gone")
+    with pytest.raises(APIError):
+        await CDECClient(mock_session, retries=0).fetch("AFO", now=NOW)
