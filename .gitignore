@@ -9,7 +9,7 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 frontend/node_modules/
-frontend/dist/
+/frontend/dist/
 .vscode/
 .idea/
 *.swp
@@ -17,14 +17,16 @@ frontend/dist/
 .DS_Store
 Thumbs.db
 
-# Sub-repos are independent git repos
-website/
-api/
-app/
+# Sub-repos are independent git repos (anchored so they don't match
+# custom_components/paddle_conditions/api/)
+/website/
+/api/
+/app/
 
 # Project-wide files (not part of HACS)
-_todo/
-_done/
-docs/
+/_todo/
+/_done/
+/docs/
 .worktrees/
 .env.secrets
+.metadata_never_index
