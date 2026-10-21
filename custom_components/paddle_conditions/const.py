@@ -18,6 +18,12 @@ CONF_DISPLAY_ORDER = "display_order"
 CONF_USGS_STATION_ID = "usgs_station_id"
 CONF_USGS_API_KEY = "usgs_api_key"
 CONF_NOAA_STATION_ID = "noaa_station_id"
+# California CDEC gauges: comma-separated station IDs, nearest first.
+CONF_CDEC_STATION_IDS = "cdec_station_ids"
+CONF_RESERVOIR_CAPACITY_AF = "reservoir_capacity_af"
+CONF_DAM_OUTFLOW_THRESHOLD_CFS = "dam_outflow_threshold_cfs"
+# Slug of the curated Paddle Conditions spot this location came from, if any.
+CONF_SPOT_SLUG = "spot_slug"
 
 # Water body types
 WATER_BODY_LAKE = "lake"

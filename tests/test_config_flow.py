@@ -62,10 +62,10 @@ async def test_location_subentry_flow_with_preset(hass: HomeAssistant):
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "user"
 
-    # Select a preset
+    # Select a curated spot
     result = await hass.config_entries.subentries.async_configure(
         result["flow_id"],
-        user_input={"preset": "lake_natoma"},
+        user_input={"preset": "lake-oroville-ca"},
     )
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "location"
@@ -76,17 +76,24 @@ async def test_location_subentry_flow_with_preset(hass: HomeAssistant):
         result = await hass.config_entries.subentries.async_configure(
             result["flow_id"],
             user_input={
-                "name": "Lake Natoma",
-                "latitude": 38.636,
-                "longitude": -121.185,
+                "name": "Lake Oroville",
+                "latitude": 39.54,
+                "longitude": -121.47,
                 "water_body_type": "lake",
                 "display_order": 0,
-                "usgs_station_id": "11446220",
+                "usgs_station_id": "",
                 "noaa_station_id": "",
+                "cdec_station_ids": "oro,  otb,",
+                "reservoir_capacity_af": 3537577,
             },
         )
     assert result["type"] == FlowResultType.CREATE_ENTRY
-    assert result["title"] == "Lake Natoma"
+    assert result["title"] == "Lake Oroville"
+    data = next(iter(entry.subentries.values())).data
+    assert data["spot_slug"] == "lake-oroville-ca"
+    assert data["cdec_station_ids"] == "ORO, OTB"
+    assert data["reservoir_capacity_af"] == 3537577
+    assert data["dam_outflow_threshold_cfs"] is None
 
 
 async def test_location_subentry_flow_custom(hass: HomeAssistant):
@@ -381,3 +388,93 @@ async def test_options_flow_restores_missing_hidden_weights(hass: HomeAssistant)
     )
 
     assert entry.options["weights"]["streamflow"] == pytest.approx(0.15)
+
+
+async def _location_flow(hass: HomeAssistant):
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], user_input={})
+    entry = result["result"]
+    result = await hass.config_entries.subentries.async_init(
+        (entry.entry_id, "location"), context={"source": config_entries.SOURCE_USER}
+    )
+    return entry, result
+
+
+def _defaults(result) -> dict:
+    """What the form shows prefilled: schema defaults and suggested values."""
+    shown = {}
+    for key in result["data_schema"].schema:
+        if (suggested := (getattr(key, "description", None) or {}).get("suggested_value")) is not None:
+            shown[str(key)] = suggested
+        elif callable(getattr(key, "default", None)):
+            shown[str(key)] = key.default()
+    return shown
+
+
+async def test_location_picker_is_searchable_list_of_curated_spots(hass: HomeAssistant):
+    _, result = await _location_flow(hass)
+
+    selector = result["data_schema"].schema["preset"].config
+    assert selector["custom_value"] is True
+    assert [(o["value"], o["label"]) for o in selector["options"]] == [
+        ("lake-natoma", "Lake Natoma (Sacramento, California)"),
+        ("lake-oroville-ca", "Lake Oroville (Butte, California)"),
+        ("custom", "Custom location"),
+    ]
+
+
+async def test_curated_spot_prefills_location_form(hass: HomeAssistant):
+    _, result = await _location_flow(hass)
+
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], user_input={"preset": "lake-oroville-ca"}
+    )
+
+    assert result["step_id"] == "location"
+    defaults = _defaults(result)
+    assert defaults["name"] == "Lake Oroville"
+    assert (defaults["latitude"], defaults["longitude"]) == (39.54, -121.47)
+    assert defaults["water_body_type"] == "lake"
+    assert defaults["cdec_station_ids"] == "ORO, OTB"
+    assert defaults["reservoir_capacity_af"] == 3537577
+    assert defaults["dam_outflow_threshold_cfs"] == 25000
+
+
+async def test_typed_text_that_is_not_a_spot_is_rejected(hass: HomeAssistant):
+    _, result = await _location_flow(hass)
+
+    result = await hass.config_entries.subentries.async_configure(result["flow_id"], user_input={"preset": "Oroville"})
+
+    assert result["step_id"] == "user"
+    assert result["errors"] == {"preset": "unknown_spot"}
+
+
+async def test_spot_metadata_failure_shows_error(hass: HomeAssistant, mock_apis):
+    mock_apis.clear_requests()
+    mock_apis.get(
+        "https://api.paddleconditions.com/public/spots/directory",
+        json={"states": [{"state": "California", "spots": [{"name": "Gone", "slug": "gone", "type": "lake"}]}]},
+    )
+    mock_apis.get("https://api.paddleconditions.com/public/spot/gone/stations", status=404)
+    _, result = await _location_flow(hass)
+
+    result = await hass.config_entries.subentries.async_configure(result["flow_id"], user_input={"preset": "gone"})
+
+    assert result["step_id"] == "user"
+    assert result["errors"] == {"base": "spot_unavailable"}
+
+
+async def test_builtin_presets_when_paddle_conditions_is_unreachable(hass: HomeAssistant, mock_apis):
+    mock_apis.clear_requests()
+    mock_apis.get("https://api.paddleconditions.com/public/spots/directory", status=503)
+    _, result = await _location_flow(hass)
+
+    options = [o["value"] for o in result["data_schema"].schema["preset"].config["options"]]
+    assert options[0] == "lake_natoma"
+    assert options[-1] == "custom"
+
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], user_input={"preset": "lake_natoma"}
+    )
+    assert result["step_id"] == "location"
+    assert _defaults(result)["name"] == "Lake Natoma"

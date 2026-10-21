@@ -117,6 +117,44 @@ WEATHER_URL = "https://api.open-meteo.com/v1/forecast"
 AQI_URL = "https://air-quality-api.open-meteo.com/v1/air-quality"
 USGS_URL = "https://api.waterdata.usgs.gov/ogcapi/v1/collections/latest-continuous/items"
 NOAA_URL = "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter"
+PC_DIRECTORY_URL = "https://api.paddleconditions.com/public/spots/directory"
+PC_STATIONS_URL = "https://api.paddleconditions.com/public/spot/{slug}/stations"
+CDEC_URL = "https://cdec.water.ca.gov/dynamicapp/req/JSONDataServlet"
+
+PC_DIRECTORY = {
+    "states": [
+        {
+            "state": "California",
+            "slug": "california",
+            "count": 2,
+            "spots": [
+                {"name": "Lake Natoma", "slug": "lake-natoma", "type": "lake", "county": "Sacramento"},
+                {"name": "Lake Oroville", "slug": "lake-oroville-ca", "type": "reservoir", "county": "Butte"},
+            ],
+        }
+    ],
+    "totalSpots": 2,
+    "topSpots": [],
+}
+
+PC_OROVILLE_STATIONS = {
+    "slug": "lake-oroville-ca",
+    "name": "Lake Oroville",
+    "type": "reservoir",
+    "lat": 39.54,
+    "lng": -121.47,
+    "reservoirCapacityAf": 3537577,
+    "damOutflowThresholdCfs": 25000,
+    "stations": {
+        "usgs": [],
+        "noaa": [],
+        "cdec": [
+            {"id": "ORO", "name": "Oroville Dam", "distanceKm": 0.4, "dataTypes": ["storage"]},
+            {"id": "OTB", "name": "Thermalito", "distanceKm": 9.1, "dataTypes": ["temp"]},
+        ],
+    },
+    "stageBaselines": {},
+}
 
 
 def make_weather_payload(hours: int = 48, **current_overrides):
@@ -215,6 +253,10 @@ def mock_apis(aioclient_mock):
     aioclient_mock.get(AQI_URL, json=make_aqi_payload())
     aioclient_mock.get(USGS_URL, json=json.loads((fixtures / "usgs_latest_continuous.json").read_text()))
     aioclient_mock.get(NOAA_URL, json={"data": []})
+    aioclient_mock.get(PC_DIRECTORY_URL, json=PC_DIRECTORY)
+    aioclient_mock.get(PC_STATIONS_URL.format(slug="lake-oroville-ca"), json=PC_OROVILLE_STATIONS)
+    # CDEC serves JSON as text/plain.
+    aioclient_mock.get(CDEC_URL, text="[]")
     return aioclient_mock
 
 

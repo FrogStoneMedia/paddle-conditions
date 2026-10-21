@@ -2,7 +2,12 @@
 
 ## Unreleased
 
+### Added
+- Adding a location starts with a searchable list of the curated Paddle Conditions spots, which fills in the coordinates, gauges and (for California) the CDEC stations, reservoir capacity and dam-release limit. If Paddle Conditions can't be reached, the built-in presets are offered instead.
+- Optional CDEC station, reservoir capacity and dam-release limit fields for California locations.
+
 ### Changed
+- Optional number fields (such as optimal streamflow) can now be cleared when editing a location; before, the old value came back.
 - Scores that land exactly on a half point now round up, as the Paddle Conditions app does. A few scores may read one point higher than in 2.0.0, and now match the app.
 
 ## 2.0.0

@@ -32,10 +32,13 @@ from homeassistant.helpers.selector import (
 
 from .api.base import APIError
 from .api.open_meteo import OpenMeteoWeatherClient
+from .api.paddle_conditions import CuratedSpot, PaddleConditionsClient, SpotStations
 from .const import (
     ACTIVITY_KAYAKING,
     ACTIVITY_SUP,
     CONF_ACTIVITY,
+    CONF_CDEC_STATION_IDS,
+    CONF_DAM_OUTFLOW_THRESHOLD_CFS,
     CONF_DISPLAY_ORDER,
     CONF_LATITUDE,
     CONF_LONGITUDE,
@@ -43,6 +46,8 @@ from .const import (
     CONF_NOAA_STATION_ID,
     CONF_OPTIMAL_CFS,
     CONF_PROFILE,
+    CONF_RESERVOIR_CAPACITY_AF,
+    CONF_SPOT_SLUG,
     CONF_USGS_API_KEY,
     CONF_USGS_STATION_ID,
     CONF_WATER_BODY_TYPE,
@@ -93,38 +98,100 @@ class PaddleConfigFlow(ConfigFlow, domain=DOMAIN):
         return PaddleOptionsFlow()
 
 
+# Paddle Conditions water body types -> this integration's.
+_SPOT_WATER_BODY_TYPES = {
+    "lake": WATER_BODY_LAKE,
+    "reservoir": WATER_BODY_LAKE,
+    "river": WATER_BODY_RIVER,
+    "bay": WATER_BODY_BAY_OCEAN,
+    "coastal": WATER_BODY_BAY_OCEAN,
+}
+
+
+def _spot_label(spot: CuratedSpot) -> str:
+    place = ", ".join(part for part in (spot.county, spot.state) if part)
+    return f"{spot.name} ({place})" if place else spot.name
+
+
+def _spot_defaults(spot: SpotStations) -> dict[str, Any]:
+    """Location form defaults for a curated spot."""
+    return {
+        CONF_NAME: spot.name,
+        CONF_LATITUDE: spot.latitude,
+        CONF_LONGITUDE: spot.longitude,
+        CONF_WATER_BODY_TYPE: _SPOT_WATER_BODY_TYPES.get(spot.type, WATER_BODY_LAKE),
+        CONF_USGS_STATION_ID: spot.usgs[0] if spot.usgs else "",
+        CONF_NOAA_STATION_ID: spot.noaa[0] if spot.noaa else "",
+        CONF_CDEC_STATION_IDS: ", ".join(spot.cdec),
+        CONF_RESERVOIR_CAPACITY_AF: spot.reservoir_capacity_af,
+        CONF_DAM_OUTFLOW_THRESHOLD_CFS: spot.dam_outflow_threshold_cfs,
+        CONF_SPOT_SLUG: spot.slug,
+    }
+
+
+def _optional_number(key: str, defaults: Mapping[str, Any], config: NumberSelectorConfig) -> dict[Any, NumberSelector]:
+    """An optional number field, prefilled but clearable.
+
+    The frontend leaves a cleared number out of the submission, so a schema
+    default would put the old value straight back; suggest it instead.
+    """
+    return {probatio.Optional(key, description={"suggested_value": defaults.get(key)}): NumberSelector(config)}
+
+
 class LocationSubentryFlow(ConfigSubentryFlow):
     """Handle adding and editing paddle locations."""
 
-    _preset_defaults: dict[str, str | float] | None = None
+    _preset_defaults: dict[str, Any] | None = None
+    _spots: dict[str, CuratedSpot] | None = None
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:
-        """Handle preset selection."""
-        if user_input is not None:
-            preset_key = user_input.get("preset", PRESET_CUSTOM)
-            if preset_key != PRESET_CUSTOM and preset_key in PRESET_LOCATIONS:
-                self._preset_defaults = dict(PRESET_LOCATIONS[preset_key])
-            else:
-                self._preset_defaults = None
-            return await self.async_step_location()
+        """Pick a curated Paddle Conditions spot (or a built-in preset if the API is unreachable)."""
+        if self._spots is None:
+            try:
+                spots = await PaddleConditionsClient(async_get_clientsession(self.hass)).curated_spots()
+            except APIError as err:
+                LOGGER.debug("Curated spots unavailable, offering built-in presets: %s", err)
+                spots = []
+            self._spots = {spot.slug: spot for spot in spots}
 
-        preset_options = [
-            SelectOptionDict(value=key, label=str(data[CONF_NAME])) for key, data in PRESET_LOCATIONS.items()
-        ]
-        preset_options.append(SelectOptionDict(value=PRESET_CUSTOM, label="Custom location"))
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            choice = user_input.get("preset", PRESET_CUSTOM)
+            self._preset_defaults = None
+            if choice in self._spots:
+                try:
+                    stations = await PaddleConditionsClient(async_get_clientsession(self.hass)).spot_stations(choice)
+                except APIError:
+                    errors["base"] = "spot_unavailable"
+                else:
+                    self._preset_defaults = _spot_defaults(stations)
+            elif not self._spots and choice in PRESET_LOCATIONS:
+                self._preset_defaults = dict(PRESET_LOCATIONS[choice])
+            elif choice != PRESET_CUSTOM:
+                # The picker accepts typed text so it can be searched.
+                errors["preset"] = "unknown_spot"
+            if not errors:
+                return await self.async_step_location()
+
+        if self._spots:
+            options = [SelectOptionDict(value=slug, label=_spot_label(spot)) for slug, spot in self._spots.items()]
+        else:
+            options = [
+                SelectOptionDict(value=key, label=str(data[CONF_NAME])) for key, data in PRESET_LOCATIONS.items()
+            ]
+        options.append(SelectOptionDict(value=PRESET_CUSTOM, label="Custom location"))
 
         return self.async_show_form(
             step_id="user",
             data_schema=probatio.Schema(
                 {
-                    probatio.Required("preset", default=next(iter(PRESET_LOCATIONS))): SelectSelector(
-                        SelectSelectorConfig(
-                            options=preset_options,
-                            mode=SelectSelectorMode.DROPDOWN,
-                        )
+                    probatio.Required("preset", default=options[0]["value"]): SelectSelector(
+                        # custom_value makes the frontend render a searchable picker.
+                        SelectSelectorConfig(options=options, mode=SelectSelectorMode.DROPDOWN, custom_value=True)
                     ),
                 }
             ),
+            errors=errors,
         )
 
     def _location_schema(self, defaults: Mapping[str, Any]) -> probatio.Schema:
@@ -153,17 +220,26 @@ class LocationSubentryFlow(ConfigSubentryFlow):
                     CONF_NOAA_STATION_ID,
                     default=str(defaults.get(CONF_NOAA_STATION_ID, "")),
                 ): str,
-                probatio.Optional(
+                **_optional_number(
                     CONF_OPTIMAL_CFS,
-                    **({"default": defaults[CONF_OPTIMAL_CFS]} if defaults.get(CONF_OPTIMAL_CFS) is not None else {}),
-                ): NumberSelector(
+                    defaults,
                     NumberSelectorConfig(
-                        min=0,
-                        max=50000,
-                        step=50,
-                        unit_of_measurement="CFS",
-                        mode=NumberSelectorMode.BOX,
-                    )
+                        min=0, max=50000, step=50, unit_of_measurement="CFS", mode=NumberSelectorMode.BOX
+                    ),
+                ),
+                probatio.Optional(
+                    CONF_CDEC_STATION_IDS,
+                    default=str(defaults.get(CONF_CDEC_STATION_IDS) or ""),
+                ): str,
+                **_optional_number(
+                    CONF_RESERVOIR_CAPACITY_AF,
+                    defaults,
+                    NumberSelectorConfig(min=0, step=1, unit_of_measurement="acre-ft", mode=NumberSelectorMode.BOX),
+                ),
+                **_optional_number(
+                    CONF_DAM_OUTFLOW_THRESHOLD_CFS,
+                    defaults,
+                    NumberSelectorConfig(min=0, step=1, unit_of_measurement="CFS", mode=NumberSelectorMode.BOX),
                 ),
             }
         )
@@ -174,6 +250,10 @@ class LocationSubentryFlow(ConfigSubentryFlow):
         user_input.setdefault(CONF_NOAA_STATION_ID, "")
         user_input.setdefault(CONF_DISPLAY_ORDER, 0)
         user_input.setdefault(CONF_OPTIMAL_CFS, None)
+        user_input.setdefault(CONF_RESERVOIR_CAPACITY_AF, None)
+        user_input.setdefault(CONF_DAM_OUTFLOW_THRESHOLD_CFS, None)
+        stations = [part.strip().upper() for part in str(user_input.get(CONF_CDEC_STATION_IDS, "")).split(",")]
+        user_input[CONF_CDEC_STATION_IDS] = ", ".join(s for s in stations if s)
 
         client = OpenMeteoWeatherClient(async_get_clientsession(self.hass))
         try:
@@ -191,7 +271,8 @@ class LocationSubentryFlow(ConfigSubentryFlow):
         if user_input is not None:
             errors = await self._async_validate_location(user_input)
             if not errors:
-                return self.async_create_entry(title=user_input[CONF_NAME], data=user_input)
+                slug = (self._preset_defaults or {}).get(CONF_SPOT_SLUG)
+                return self.async_create_entry(title=user_input[CONF_NAME], data={**user_input, CONF_SPOT_SLUG: slug})
 
         defaults = self._preset_defaults or {}
         return self.async_show_form(
@@ -208,11 +289,12 @@ class LocationSubentryFlow(ConfigSubentryFlow):
             if not errors:
                 # The entry's update listener reloads it; a reloading helper here
                 # would reload twice (and HA rejects the combination).
+                subentry = self._get_reconfigure_subentry()
                 return self.async_update_and_abort(
                     self._get_entry(),
-                    self._get_reconfigure_subentry(),
+                    subentry,
                     title=user_input[CONF_NAME],
-                    data=user_input,
+                    data={**user_input, CONF_SPOT_SLUG: subentry.data.get(CONF_SPOT_SLUG)},
                 )
 
         current = self._get_reconfigure_subentry().data
