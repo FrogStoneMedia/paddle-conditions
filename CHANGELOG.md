@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- CDEC stations that have reported none of the readings we use in the last two days are checked once a day instead of every 30 minutes. Curated spots can list gauges that only measure weather or power output; Lake Oroville lists nine, and six of them were sending back nothing, so it now makes 6 CDEC requests per half hour instead of 18.
+
 ## 2.1.0
 
 ### Added

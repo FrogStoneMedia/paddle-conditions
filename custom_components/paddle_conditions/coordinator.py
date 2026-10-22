@@ -71,6 +71,10 @@ USGS_RATE_LIMITED: HassKey[set[str]] = HassKey(f"{DOMAIN}_usgs_rate_limited")
 # CDEC river and water quality gauges report every 15 minutes, reservoirs hourly.
 CDEC_INTERVAL = timedelta(minutes=30)
 CDEC_MAX_AGE = timedelta(hours=6)
+# Spots list gauges that report none of our sensors (Oroville: six of nine).
+# A fetch spans two days, so an empty answer means the station is silent, not
+# late; ask it again daily instead of every poll.
+CDEC_SILENT_RECHECK = timedelta(days=1)
 # Stage baselines are curated by hand; a daily read is plenty.
 BASELINE_INTERVAL = timedelta(days=1)
 BASELINE_RETRY = timedelta(hours=1)
@@ -134,6 +138,8 @@ class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):
         # Per station, nearest first, as last read.
         self._cdec_readings: list[tuple[str, CDECData]] = []
         self._cdec_next_fetch = dt_util.utcnow()
+        # Silent stations and when to ask them again.
+        self._cdec_silent_until: dict[str, datetime] = {}
         self.pc_client = PaddleConditionsClient(session)
         self._stage_baselines: dict[str, dict[int, StageBaseline]] = {}
         self._baselines_next_fetch = dt_util.utcnow()
@@ -179,8 +185,8 @@ class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):
             sources["USGS"] = self.usgs_client.fetch(self.usgs_station_id)
         if self.noaa_station_id:
             sources["NOAA"] = self.noaa_client.fetch_water_temp(self.noaa_station_id)
-        if self.cdec_station_ids and now >= self._cdec_next_fetch:
-            sources["CDEC"] = self._fetch_cdec(now)
+        if now >= self._cdec_next_fetch and (cdec_due := self._cdec_due(now)):
+            sources["CDEC"] = self._fetch_cdec(cdec_due, now)
         if self.nws_client is not None and now >= self._nws_next_fetch:
             sources["NWS"] = self.nws_client.fetch(self.latitude, self.longitude)
         if self.spot_slug and self.cdec_station_ids and now >= self._baselines_next_fetch:
@@ -366,12 +372,16 @@ class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):
             reading.streamflow_cfs if recent(reading.streamflow_observed) else None,
         )
 
-    async def _fetch_cdec(self, now: datetime) -> list[tuple[str, CDECData | BaseException]]:
-        """Read every CDEC station; one failing station doesn't sink the rest."""
+    def _cdec_due(self, now: datetime) -> list[str]:
+        """The CDEC stations to read this poll: all but the silent ones not yet due a recheck."""
+        return [station for station in self.cdec_station_ids if self._cdec_silent_until.get(station, now) <= now]
+
+    async def _fetch_cdec(self, stations: list[str], now: datetime) -> list[tuple[str, CDECData | BaseException]]:
+        """Read the given CDEC stations; one failing station doesn't sink the rest."""
         results = await asyncio.gather(
-            *(self.cdec_client.fetch(station, now) for station in self.cdec_station_ids), return_exceptions=True
+            *(self.cdec_client.fetch(station, now) for station in stations), return_exceptions=True
         )
-        return list(zip(self.cdec_station_ids, results, strict=True))
+        return list(zip(stations, results, strict=True))
 
     def _handle_cdec(self, now: datetime, outcomes: dict[str, Any]) -> None:
         """Record CDEC readings and stage baselines and decide when to ask again."""
@@ -380,6 +390,11 @@ class PaddleCoordinator(DataUpdateCoordinator[PaddleConditions]):
                 cdec = [(station, cdec) for station in self.cdec_station_ids]
             fresh = {station: data for station, data in cdec if isinstance(data, CDECData)}
             errors = [err for _, err in cdec if isinstance(err, BaseException)]
+            for station, answer in fresh.items():
+                if answer == CDECData():
+                    self._cdec_silent_until[station] = now + CDEC_SILENT_RECHECK
+                else:
+                    self._cdec_silent_until.pop(station, None)
             if fresh:
                 self._source_ok("CDEC")
                 # A station that failed this time keeps its last reading; CDEC_MAX_AGE expires it.
