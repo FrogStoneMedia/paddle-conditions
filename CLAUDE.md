@@ -19,7 +19,6 @@ This is the only public repo in the project: `FrogStoneMedia/paddle-conditions` 
 - `frontend/src/cards/` - the six cards; `frontend/src/lib/` - shared modules (registry-based sibling lookup, unit conversion, time zone, daylight, contrast-tested palette, native `<dialog>`, accessible mini charts)
 - `frontend/` build: `npm ci --ignore-scripts && npm test && npm run build`. Commit the rebuilt `dist/paddle-cards.js` with the source; CI fails if they differ.
 - Cards keep `paddle-score-card` / `paddle-spots-card` names and config forever; existing dashboards depend on them.
-- `ha-integration/` - separate scratch area, check CLAUDE context when touching
 
 ## Conventions
 - Any user-visible string (entity names, config flow text, card labels): "Paddle Conditions" two words. No em-dashes.
