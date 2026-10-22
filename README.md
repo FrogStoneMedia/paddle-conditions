@@ -7,9 +7,9 @@
 Paddle Conditions is a [Home Assistant](https://www.home-assistant.io/) custom integration that fetches weather, water, and air quality data for your paddle spots, scores each one **Go / Caution / No-go**, and shows a 24-hour forecast so you can pick the best window. All data comes from free public APIs. No accounts, no subscriptions, and no API keys required.
 
 <p align="center">
-  <img src="docs/images/dashboard-mobile.png" alt="Paddle Conditions dashboard showing score badges and location card" width="300"/>
+  <img src="docs/images/score-card.png" alt="Score card for Lake Natoma: 88, Go, best time tomorrow at noon, with wind, air quality, temperature, UV, visibility and rain chance tiles and a forecast strip" width="300"/>
   &nbsp;&nbsp;
-  <img src="docs/images/detail-overlay.png" alt="Detail overlay with paddle score, wind, and temperature charts" width="300"/>
+  <img src="docs/images/details.png" alt="Details view with hourly charts for paddle score, wind and gusts, air and water temperature, and UV index" width="300"/>
 </p>
 
 I built this because I was tired of checking four different apps before every paddle. Wind on one site, AQI on another, water temp somewhere else, streamflow on a USGS page that looks like it was designed in 1998. I paddle year-round on spots like [Lake Natoma](https://www.mklibrary.com/lake-natoma-california/), [Sand Harbor at Tahoe](https://www.mklibrary.com/sand-harbor-state-park-paddle-boarding/), and [New Bullards Bar Reservoir](https://www.mklibrary.com/new-bullards-bar-reservoir-california/), and I do [distance sessions](https://www.mklibrary.com/why-you-bonk-on-long-paddle-board-sessions/) where conditions at launch can be completely different from conditions at mile 5. I needed one place that pulled it all together and told me: should I go, or not?
@@ -70,9 +70,11 @@ Six Lovelace cards ship with the integration in one bundle. No extra HACS card d
 - **`paddle-factors-card`**, **`paddle-forecast-card`**, **`paddle-chart-card`**, **`paddle-history-card`**: the factor breakdown, a forecast table, a layered 24-hour chart, and score history from the recorder
 
 <p align="center">
-  <img src="docs/images/forecast-cards.png" alt="Forecast timeline and multi-location view" width="300"/>
-  &nbsp;&nbsp;
-  <img src="docs/images/tahoe-overlay.png" alt="Lake Tahoe detail overlay with water temperature chart" width="300"/>
+  <img src="docs/images/spots-card.png" alt="Spots card with the score and rating for four paddle spots" width="260"/>
+  &nbsp;
+  <img src="docs/images/forecast-card.png" alt="Forecast card listing 3-hour windows with score, rating, wind, temperature and rain chance, best window starred" width="260"/>
+  &nbsp;
+  <img src="docs/images/factors-card.png" alt="Factors card for Folsom Lake with each factor's reading and sub-score, including reservoir level at 39.8 percent" width="260"/>
 </p>
 
 ### Accessibility
