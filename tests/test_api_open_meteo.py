@@ -161,6 +161,22 @@ async def test_fetch_weather_requests_forward_utc_window(mock_session, weather_r
     assert "precipitation_probability" in hourly
 
 
+async def test_fetch_weather_includes_todays_daylight_after_utc_midnight(mock_session, weather_response):
+    """West of Greenwich the UTC date turns over before sunset (5 PM in California, 2 PM in Hawaii).
+
+    The daily list starts at the current UTC date, so without a past day the spot's
+    own afternoon was missing and the cards planned and charted tomorrow as "today".
+    """
+    mock_session.get = mock_get_json(weather_response)
+
+    await OpenMeteoWeatherClient(mock_session).fetch(latitude=21.2766, longitude=-157.8284)
+
+    params = mock_session.get.call_args.kwargs["params"]
+    assert params["past_days"] == 1
+    # forecast_hours still starts the hourly series now, past_days only adds a daily row.
+    assert params["forecast_hours"] == 48
+
+
 async def test_fetch_weather_hourly_times_are_utc_aware(mock_session):
     """Offset-free GMT timestamps are returned as explicit UTC ISO strings."""
     response = {
