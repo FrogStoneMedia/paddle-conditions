@@ -109,6 +109,9 @@ class OpenMeteoWeatherClient(BaseAPIClient):
             # forecast_hours starts the series at the current hour; forecast_days
             # starts it at local midnight, which put past hours in the forecast.
             "daily": "sunrise,sunset",
+            # Days are UTC dates, which turn over before sunset west of Greenwich;
+            # a past day keeps this afternoon's daylight in the list.
+            "past_days": 1,
             "forecast_days": 3,
             "forecast_hours": FORECAST_HOURS,
             "timezone": "GMT",
