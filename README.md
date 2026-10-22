@@ -7,7 +7,7 @@
 Paddle Conditions scores each of your paddle spots from 0 to 100 and calls it Go, Caution or No-go, then finds the best three-hour window in the next day. It's a [Home Assistant](https://www.home-assistant.io/) integration that reads wind, air quality, temperature, UV, visibility, rain and water data from free public sources, so there is nothing to sign up for.
 
 <p align="center">
-  <img src="docs/images/dashboard.png" alt="A Home Assistant dashboard with Paddle Conditions cards: Tumon Bay scored 51, Caution, with a tile per factor and the next three forecast blocks; a row of four spots, three Go and one Caution; and the scoring factors for Folsom Lake, including reservoir level at 39.8 percent" width="820"/>
+  <img src="docs/images/dashboard.png" alt="A Home Assistant dashboard with Paddle Conditions cards: Waikiki scored 73, Go, with a tile per factor and the next three forecast blocks; a row of four spots, all Go; and the scoring factors for Folsom Lake, including reservoir level at 39.8 percent" width="820"/>
 </p>
 
 I built this because I was tired of checking four different apps before every paddle. Wind on one site, AQI on another, water temp somewhere else, streamflow on a USGS page that looks like it was designed in 1998. I paddle year-round on spots like [Lake Natoma](https://www.mklibrary.com/lake-natoma-california/), [Sand Harbor at Tahoe](https://www.mklibrary.com/sand-harbor-state-park-paddle-boarding/), and [New Bullards Bar Reservoir](https://www.mklibrary.com/new-bullards-bar-reservoir-california/), and I do [distance sessions](https://www.mklibrary.com/why-you-bonk-on-long-paddle-board-sessions/) where conditions at launch can be completely different from conditions at mile 5. I needed one place that pulled it all together and told me: should I go, or not?
@@ -124,7 +124,7 @@ Six cards come with the integration, so there's nothing else to download from HA
 | `paddle-history-card` | Score history over 7, 30 or 90 days, with the average, the best score and the number of Go days |
 
 <p align="center">
-  <img src="docs/images/details.png" alt="The score card's details view for Tumon Bay: hourly charts for the paddle score, wind and gusts, air and water temperature, UV index and rain chance" width="300"/>
+  <img src="docs/images/details.png" alt="The score card's details view for Waikiki: hourly charts for the paddle score, wind and gusts, air and water temperature, UV index and rain chance" width="300"/>
 </p>
 
 The best time to go uses the spot's own sunrise and sunset and ends at least two hours before dark.
