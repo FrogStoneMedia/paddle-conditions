@@ -26,7 +26,9 @@ Thumbs.db
 # Project-wide files (not part of HACS)
 /_todo/
 /_done/
-/docs/
+# Planning docs stay local; README screenshots are tracked.
+/docs/*
+!/docs/images/
 .worktrees/
 .env.secrets
 .metadata_never_index
