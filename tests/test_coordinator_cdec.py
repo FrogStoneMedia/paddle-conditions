@@ -162,7 +162,7 @@ async def test_cdec_down_is_logged_once_and_retried(hass: HomeAssistant, config_
 
 @pytest.mark.parametrize("location_data", [RESERVOIR])
 async def test_cdec_is_polled_every_30_minutes(hass: HomeAssistant, config_entry, aioclient_mock, freezer):
-    _serve(aioclient_mock, {"FOL": [_record(15, 500000)], "AFO": []})
+    _serve(aioclient_mock, {"FOL": [_record(15, 500000)], "AFO": [_record(25, 60.0)]})
     await setup_integration(hass, config_entry)
     requests_per_poll = _calls(aioclient_mock, CDEC_URL)
     assert requests_per_poll == 4
@@ -172,6 +172,41 @@ async def test_cdec_is_polled_every_30_minutes(hass: HomeAssistant, config_entry
     assert _calls(aioclient_mock, CDEC_URL) == requests_per_poll
     await _tick(hass, freezer, 10)
     assert _calls(aioclient_mock, CDEC_URL) == 2 * requests_per_poll
+
+
+@pytest.mark.parametrize("location_data", [RESERVOIR])
+async def test_silent_station_is_rechecked_daily(hass: HomeAssistant, config_entry, aioclient_mock, freezer):
+    """Spots list gauges that report none of our sensors (Oroville: six of nine); poll those once a day."""
+    _serve(aioclient_mock, {"FOL": [_record(15, 500000)], "AFO": []})
+    await setup_integration(hass, config_entry)
+    assert _calls(aioclient_mock, CDEC_URL) == 4
+
+    await _tick(hass, freezer, 30)
+    assert _calls(aioclient_mock, CDEC_URL) == 6  # FOL only
+
+    # A day on, AFO is asked again, and once it reports it is polled with the rest.
+    for _ in range(46):  # to 23.5 hours after setup
+        await _tick(hass, freezer, 30)
+    assert _conditions(config_entry).water_temp is None
+    _serve(aioclient_mock, {"FOL": [_record(15, 500000)], "AFO": [_record(25, 60.0)]})
+    await _tick(hass, freezer, 30)
+    assert _conditions(config_entry).water_temp == 60.0
+    _serve(aioclient_mock, {"FOL": [_record(15, 500000)], "AFO": [_record(25, 60.0)]})
+    await _tick(hass, freezer, 30)
+    assert _calls(aioclient_mock, CDEC_URL) == 4
+
+
+@pytest.mark.parametrize("location_data", [RESERVOIR])
+async def test_all_stations_silent(hass: HomeAssistant, config_entry, aioclient_mock, freezer, caplog):
+    """No CDEC requests between daily checks, and silence isn't reported as an outage."""
+    _serve(aioclient_mock, {"FOL": [], "AFO": []})
+    await setup_integration(hass, config_entry)
+    await _tick(hass, freezer, 30)
+    await _tick(hass, freezer, 30)
+
+    assert _calls(aioclient_mock, CDEC_URL) == 4
+    assert _conditions(config_entry).reservoir_storage_af is None
+    assert "CDEC data" not in caplog.text
 
 
 @pytest.mark.parametrize("location_data", [RESERVOIR])
