@@ -516,9 +516,10 @@ const STYLES = `
   .factor-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; padding: 12px; }
   .factor-tile { border-radius: 8px; background: var(--secondary-background-color, rgba(127,127,127,.12)); border: 1px solid transparent; }
   .factor-tile.expanded { grid-column: 1 / -1; border-color: var(--primary-color); }
-  .factor-toggle, .factor-static { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; width: 100%; padding: 10px; }
-  .factor-label { font-size: 12px; font-weight: 600; letter-spacing: .5px; text-transform: uppercase; }
-  .chevron { grid-row: 1; grid-column: 2; font-size: 12px; color: var(--secondary-text-color); }
+  /* Only the bar shares a column with the score, so a long label and "100/100" can't add up past the tile. */
+  .factor-toggle, .factor-static { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; width: 100%; padding: 10px; }
+  .factor-label { grid-row: 1; grid-column: 1 / -1; padding-right: 16px; font-size: 12px; font-weight: 600; letter-spacing: .5px; text-transform: uppercase; }
+  .chevron { grid-row: 1; grid-column: 2; justify-self: end; font-size: 12px; color: var(--secondary-text-color); }
   .factor-value { grid-column: 1 / -1; font-size: 13px; color: var(--secondary-text-color); }
   .factor-bar { grid-column: 1; align-self: center; height: 6px; border-radius: 3px; overflow: hidden; background: var(--divider-color, rgba(127,127,127,.3)); }
   .factor-bar > span { display: block; height: 100%; border-radius: 3px; }
