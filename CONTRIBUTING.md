@@ -226,10 +226,12 @@ All lint and format checks must pass before a PR can be merged. CI runs these au
 
 ### Commit messages
 
-Follow the project's commit prefix convention:
+Use [Conventional Commits](https://www.conventionalcommits.org/): a type, an optional scope, and a short description.
 
 ```
-[ha-integration] Brief description of the change
+fix(scoring): round half points up like the app
+feat(sensor): add river stage
+docs(readme): restore screenshots
 ```
 
 Keep commits focused. One logical change per commit.
