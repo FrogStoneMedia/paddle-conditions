@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 2.1.1
+
+### Fixed
+- West of Greenwich, from UTC midnight until sunset (5 PM to sunset in California, 2 PM in Hawaii), the score card's details charts showed tomorrow's hours under "Today", with no line for now. Today's sunrise and sunset are now always in the forecast.
+- A score of 100/100 no longer pushes past the edge of a narrow factor tile.
 
 ### Changed
 - CDEC stations that have reported none of the readings we use in the last two days are checked once a day instead of every 30 minutes. Curated spots can list gauges that only measure weather or power output; Lake Oroville lists nine, and six of them were sending back nothing, so it now makes 6 CDEC requests per half hour instead of 18.
