@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.1.0
 
 ### Added
 - Adding a location starts with a searchable list of the curated Paddle Conditions spots, which fills in the coordinates, gauges and (for California) the CDEC stations, reservoir capacity and dam-release limit. If Paddle Conditions can't be reached, the built-in presets are offered instead.
